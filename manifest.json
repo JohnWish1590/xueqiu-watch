@@ -5,7 +5,7 @@
   "description": "监测雪球特别关注分组，博主发新帖时在本机弹窗+通知提醒，可选推送到微信。",
   "author": {
     "email": "cheung.cn@gmail.com",
-    "url": "https://github.com/JohnWish1590/xueqiu-special-follow-notifier"
+    "url": "https://github.com/JohnWish1590/xueqiu-watch"
   },
   "permissions": ["alarms", "notifications", "storage", "offscreen", "windows", "tabs", "scripting", "system.display"],
   "host_permissions": ["https://xueqiu.com/*", "https://*.xueqiu.com/*", "https://qyapi.weixin.qq.com/*"],
