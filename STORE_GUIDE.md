@@ -79,7 +79,7 @@
 
 - **作者署名**：下一站澳门（设置页关于区块显示「微博@下一站澳门」并带超链接跳微博主页）
 - **邮箱**：`cheung.cn@gmail.com`（`manifest.author.email` / `LICENSE` / `PRIVACY.md` 联系处）
-- **GitHub 源码**：`https://github.com/JohnWish1590/xueqiu-special-follow-notifier`（`manifest.author.url` / 设置页「源码：」一行）
+- **GitHub 源码**：`https://github.com/JohnWish1590/xueqiu-watch`（`manifest.author.url` / 设置页「源码：」一行）
 - **微博**：`@下一站澳门`（`https://weibo.com/u/7708742647`），写在 `PRIVACY.md` 联系处与设置页作者超链
 
 > 2026-08-01 新规要求的数据用途披露已在 `PRIVACY.md` 第五、六节对应，无需额外改动。
