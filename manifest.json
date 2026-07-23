@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "雪球特别关注 新帖提醒",
-  "version": "1.2.2",
-  "description": "监测雪球特别关注分组，博主发新帖时在本机弹窗+通知提醒，可选推送到微信。",
+  "name": "雪哨",
+  "version": "1.3.0",
+  "description": "雪哨：监控雪球特别关注分组新帖，本机通知+常驻小窗+可选推送到微信。",
   "author": {
     "email": "cheung.cn@gmail.com",
     "url": "https://github.com/JohnWish1590/xueqiu-watch"
@@ -19,7 +19,7 @@
   }],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "雪球特别关注 新帖提醒",
+    "default_title": "雪哨",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
