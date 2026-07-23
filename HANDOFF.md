@@ -10,7 +10,7 @@
 
 - **它是什么**：一个 Chrome 扩展，监控你在雪球（xueqiu.com）「特别关注」分组里的博主，他们一发新帖，就**在本机弹系统通知 + 右侧磁吸常驻小窗 + 可选提示音**，并可选地**推送到你的个人微信**（企业微信自建应用）。
 - **当前版本**：`1.2.2`（Manifest V3）。
-- **GitHub 仓库（public）**：`https://github.com/JohnWish1590/xueqiu-special-follow-notifier`
+- **GitHub 仓库（public）**：`https://github.com/JohnWish1590/xueqiu-watch`
 - **本地路径**：`C:\Users\user\WorkBuddy\2026-07-20-13-33-18\xueqiu-chrome-extension\`
 - **完成度**：功能完整、关键 bug 已修、可打包上架。上架还差两件事：① 把 `PRIVACY.md` 托管成可访问的 URL（Gist/Pages）填进商店后台；② 用户付 $5 开发者注册费。
 - **⚠️ 关键事实**：本地 git 仓库**没有配置 remote**（历史上是用 GitHub Contents API 推送的，不是 `git push`）。直接 `git push` 会失败，必须用 API 方式同步（见第 11 节）。
@@ -206,7 +206,7 @@ chrome.alarms('poll') 每 N 分钟触发
 - `manifest_version: 3`，`version: 1.2.2`。
 - `permissions`: `alarms, notifications, storage, offscreen, windows, tabs, scripting, system.display`。
 - `host_permissions`: `https://xueqiu.com/*`、`https://*.xueqiu.com/*`、`https://qyapi.weixin.qq.com/*`。
-- `author`: `{ email: "cheung.cn@gmail.com", url: "https://github.com/JohnWish1590/xueqiu-special-follow-notifier" }`。
+- `author`: `{ email: "cheung.cn@gmail.com", url: "https://github.com/JohnWish1590/xueqiu-watch" }`。
 - 上架权限理由对照见 `STORE_GUIDE.md` 第五节。
 
 ---
@@ -230,14 +230,14 @@ chrome.alarms('poll') 每 N 分钟触发
 - ✅ 同步用 **GitHub Contents API**（`PUT /repos/{owner}/{repo}/contents/{path}`）。
 
 **推送机制（给下一位 AI）**：
-- 仓库：`JohnWish1590/xueqiu-special-follow-notifier`（owner 即用户 GitHub 用户名）。
+- 仓库：`JohnWish1590/xueqiu-watch`（owner 即用户 GitHub 用户名）。
 - 认证：需要用户的 **Personal Access Token（PAT）**，scope 需 `repo` + `workflow`。**请勿把 token 明文提交进本仓库任何文件**（仓库是 public，会泄露）。脚本里用环境变量 `GH_TOKEN` 占位，运行时由用户提供或在本地安全环境注入。
 - 流程：对每个要更新的文件，`GET /contents/{path}` 取当前 `sha`（404 表示新建），再 `PUT /contents/{path}`（更新带 `sha`，新建不带）传 `content`（文件 Base64）+ `message`。
 - 示例（Python，token 从环境变量读）：
   ```python
   import base64, json, os, urllib.request
   TOKEN = os.environ["GH_TOKEN"]          # 用户提供的 PAT，勿硬编码
-  REPO  = "JohnWish1590/xueqiu-special-follow-notifier"
+  REPO  = "JohnWish1590/xueqiu-watch"
   def sync(local_path, repo_path):
       with open(local_path, "rb") as f:
           content = base64.b64encode(f.read()).decode()
@@ -262,7 +262,7 @@ chrome.alarms('poll') 每 N 分钟触发
 ## 12. 署名 / 版权 / 联系（现状，已全部填好，无占位符）
 
 - **作者署名**：下一站澳门（关于区块显示「微博@下一站澳门」，带超链接跳 `https://weibo.com/u/7708742647`）。
-- **联系 / 源码**：GitHub `https://github.com/JohnWish1590/xueqiu-special-follow-notifier`（设置页「源码：」一行 + `manifest.author.url`）。
+- **联系 / 源码**：GitHub `https://github.com/JohnWish1590/xueqiu-watch`（设置页「源码：」一行 + `manifest.author.url`）。
 - **邮箱**：`cheung.cn@gmail.com`（`manifest.author.email`、`LICENSE`、`PRIVACY.md` 联系处）。
 - **微博**：`@下一站澳门`（`https://weibo.com/u/7708742647`），写在 `PRIVACY.md` 联系处与设置页作者超链。
 - **版权**：`© 2026 下一站澳门. 保留所有权利。`（设置页关于区块）；`LICENSE` 含完整免责（与雪球官方无隶属关系）。
