@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "雪哨",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "雪哨：监控雪球特别关注分组新帖，本机通知+常驻小窗+可选推送到微信。",
   "author": {
     "email": "cheung.cn@gmail.com",
