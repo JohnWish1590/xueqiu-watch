@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <title>雪哨</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -9,30 +10,27 @@
       height: 100vh;
       overflow: hidden;
       font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
-      background: transparent;
+      background: #fff;
       display: flex;
       flex-direction: column;
     }
-    body { animation: magneticSnap .55s cubic-bezier(.34, 1.56, .64, 1); }
-    /* 磁性吸附：偏右进入 → 越过目标 → 弹回稳定，仿 magnet snap */
-    @keyframes magneticSnap {
-      0%   { transform: translateX(50px);  opacity: 0; }
-      45%  { transform: translateX(-10px); opacity: 1; }
-      70%  { transform: translateX(4px); }
-      100% { transform: translateX(0);    opacity: 1; }
+    body { animation: fadeIn .3s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    /* 雪球品牌蓝 */
+    /* 顶部标题栏 */
     .hd {
-      background: #1E6FFF;
+      background: linear-gradient(135deg, #1a6cff 0%, #1E6FFF 50%, #2563eb 100%);
       color: #fff;
-      padding: 11px 14px;
-      font-size: 14px;
-      font-weight: 500;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
-      border-radius: 14px 14px 0 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 2px 8px rgba(30,111,255,.15);
     }
     .hd .total { font-size: 12px; opacity: .9; }
     .hd button {
@@ -107,15 +105,14 @@
       flex: 1; display: flex; align-items: center; justify-content: center;
     }
     .ft {
-      font-size: 11px; color: #AAA; text-align: center; padding: 8px 0;
+      font-size: 10.5px; color: #AAA; text-align: center; padding: 7px 0;
       flex-shrink: 0; border-top: 0.5px solid #F0F0F2; background: #FAFAFC;
-      border-radius: 0 0 14px 14px;
     }
   </style>
 </head>
 <body>
   <div class="hd">
-    <span>❄ 特别关注</span>
+    <span>❄ 雪哨</span>
     <span class="total" id="total"></span>
     <div style="display:flex;gap:6px;align-items:center;">
       <button id="markAll">全部已读</button>
