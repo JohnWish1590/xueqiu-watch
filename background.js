@@ -12,9 +12,17 @@ const XQ_BASE = 'https://xueqiu.com';
 const LOG_KEY = 'runLog';
 const LOG_ERR_KEY = 'runLogErrors';
 const LOG_MAX = 300;          // INFO/WARN 最多保留最近 300 条
+const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;  // 所有日志保留 7 天，超期自动清理
 const logBuf = [];            // INFO / WARN 滚动缓冲
-const errBuf = [];            // ERROR 永久保留（复制日志后清空）
+const errBuf = [];            // ERROR 同样受 7 天保留约束
 let logFlushTimer = null;
+
+// 过滤掉超期的日志条目（通用函数）
+function pruneOld(entries) {
+  if (!Array.isArray(entries) || !entries.length) return [];
+  const cutoff = Date.now() - LOG_RETENTION_MS;
+  return entries.filter(e => (e.t || 0) >= cutoff);
+}
 
 function safeStr(x) {
   if (typeof x === 'string') return x;
@@ -49,13 +57,13 @@ function scheduleLogFlush() {
 
 async function flushLog() {
   try {
-    await chrome.storage.local.set({ [LOG_KEY]: logBuf.slice(), [LOG_ERR_KEY]: errBuf.slice() });
+    await chrome.storage.local.set({ [LOG_KEY]: pruneOld(logBuf).slice(), [LOG_ERR_KEY]: pruneOld(errBuf).slice() });
   } catch (e) { /* 写入失败忽略，下次再试 */ }
 }
 
-// 合并返回（按时间排序），ERROR 与 INFO/WARN 交错在一条时间线里
+// 合并返回（按时间排序），ERROR 与 INFO/WARN 交错在一条时间线里（超期条目不导出）
 async function getLog() {
-  const all = errBuf.concat(logBuf);
+  const all = pruneOld(errBuf.concat(logBuf));
   all.sort((a, b) => a.t - b.t);
   return all;
 }
@@ -73,18 +81,22 @@ async function clearLog() {
   try { await chrome.storage.local.set({ [LOG_KEY]: [], [LOG_ERR_KEY]: [] }); } catch (e) {}
 }
 
-// 冷启动：把上次持久化的日志读回内存，保持连续
+// 冷启动：把上次持久化的日志读回内存，保持连续（超期条目自动丢弃）
 (async () => {
   try {
     const stored = await chrome.storage.local.get([LOG_KEY, LOG_ERR_KEY]);
-    const saved = stored[LOG_KEY];
-    if (Array.isArray(saved) && saved.length) {
+    const saved = pruneOld(stored[LOG_KEY]);
+    if (saved.length) {
       for (const e of saved) logBuf.push(e);
       if (logBuf.length > LOG_MAX) logBuf.splice(0, logBuf.length - LOG_MAX);
     }
-    const savedErr = stored[LOG_ERR_KEY];
-    if (Array.isArray(savedErr) && savedErr.length) {
+    const savedErr = pruneOld(stored[LOG_ERR_KEY]);
+    if (savedErr.length) {
       for (const e of savedErr) errBuf.push(e);
+    }
+    // 存盘也同步清理一次（防止 storage 里堆积过期数据）
+    if (saved.length !== (stored[LOG_KEY] || []).length || savedErr.length !== (stored[LOG_ERR_KEY] || []).length) {
+      flushLog();
     }
   } catch (e) {}
 })();
@@ -734,14 +746,20 @@ async function closeAllAlertWindows() {
   } catch (e) {}
 }
 
-// 拿主屏可用区域（横坐标用这个贴边）
+// 拿主屏信息：横向用 bounds（完整屏幕宽度，确保贴边无间隙），纵向用 workArea（避开任务栏）
 async function getPrimaryDisplayBounds() {
   try {
     if (chrome.system && chrome.system.display && chrome.system.display.getInfo) {
       const infos = await chrome.system.display.getInfo();
       // 优先主屏，其次第一块
       const d = (infos || []).find(x => x.isPrimary) || (infos || [])[0];
-      if (d && d.workArea) return d.workArea; // {left, top, width, height}
+      if (d) {
+        // 返回合并值：横坐标用完整屏幕边界（bounds），纵坐标用工作区（workArea）
+        // 这样 left 能精确贴到物理屏幕右边缘，top 又不会盖住底部任务栏
+        const wa = d.workArea || {};
+        const b = d.bounds || {};
+        return { left: b.left || 0, top: wa.top || 0, width: b.width || wa.width || 0, height: wa.height || 0 };
+      }
     }
   } catch (e) { /* 不可用走兜底 */ }
   return null;
@@ -777,7 +795,7 @@ async function openAlertWindow() {
       try { await chrome.runtime.sendMessage({ type: 'alertRefresh' }); } catch (e) {}
       return;
     }
-    const W = 360, H = 460;
+    const W = 420, H = 480;
     let left, top;
 
     // 横向：贴**屏幕**右边缘（不是浏览器窗口右边缘——浏览器可能没全屏）
@@ -789,7 +807,7 @@ async function openAlertWindow() {
       top = browser.top + BROWSER_CHROME_HEIGHT;   // 浏览器顶部 + 150（标签+地址+书签栏）
     } else if (area) {
       // 兜底：只有屏幕信息
-      left = area.left + area.width - W - 16;
+      left = area.left + area.width - W;
       top = area.top + 80;
     } else {
       left = undefined; top = undefined;
