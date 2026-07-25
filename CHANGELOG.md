@@ -5,6 +5,17 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.3.1] - 2026-07-26
+
+> ⚠️ **功能性回归修复版本，已装用户请直接覆盖升级（开发者模式重新加载），无需重新配置。**
+
+### Fixed
+- 修复 v1.3.0 引入的弹窗完全不弹出的严重 bug：上一版为让弹窗标题栏显示「雪哨」，误在 `chrome.windows.create` 的 `createData` 中传入了 API 不支持的 `title` 字段，导致整个创建调用被 Chrome 拒绝（`Error: Unexpected property: 'title'`），弹窗静默失败仅留系统通知。
+- 标题栏显示「雪哨」改由 `alert.html` 自身的 `<title>` 承担（popup 窗口会显示页面标题），移除非法 `title` 字段后弹窗恢复正常。
+- 同步新增弹窗创建失败的 ERROR 日志（此前为静默失败，难以排查）。
+
+---
+
 ## [1.3.0] - 2026-07-23
 
 > ⚠️ **品牌更名版本，运行时无破坏性变更，已装用户可直接覆盖升级，无需重新配置。** 本次仅品牌命名、文档体系规范化与发布流程建设，扩展的权限、存储结构、设置项与对外行为均与 v1.2.2 完全一致。
@@ -45,6 +56,7 @@
 ---
 
 <!-- 链接定义（便于跨文件跳转，无实际跳转需求可忽略） -->
+[1.3.1]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.1
 [1.3.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.0
 [1.2.2]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.2.2
 [1.2.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.2.0
