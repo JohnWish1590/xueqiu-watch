@@ -5,6 +5,15 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.3.3] - 2026-07-26
+
+> ⚠️ **弹窗贴边修复（补强）**。已装用户请开发者模式重新加载覆盖升级。
+
+### Fixed
+- **弹窗仍不贴边（v1.3.2 遗留）**：仅改用 `bounds` 取屏幕宽度还不够——Windows 上 `type:'popup'` 窗口创建后，系统边框 / DWM 会把实际右边界比设定值**左移几像素**，留下可见间隙。本次新增**创建后读回实际位置、按右侧间隙微调**的校正逻辑（`chrome.windows.create` → `chrome.windows.get` 读实际 `left/width` → `chrome.windows.update` 右移 `gap` 像素），保证真正紧贴物理屏幕右边缘。同时显式加 `state:'normal'` 避免被吸附行为干扰。
+
+---
+
 ## [1.3.2] - 2026-07-26
 
 > ⚠️ **UI 重构 + 日志策略优化 + 弹窗贴边修复**。已装用户请开发者模式重新加载覆盖升级，无需重新配置。
@@ -77,6 +86,7 @@
 ---
 
 <!-- 链接定义（便于跨文件跳转，无实际跳转需求可忽略） -->
+[1.3.3]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.3
 [1.3.2]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.2
 [1.3.1]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.1
 [1.3.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.0
