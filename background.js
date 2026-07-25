@@ -794,7 +794,7 @@ async function openAlertWindow() {
     } else {
       left = undefined; top = undefined;
     }
-    const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false };
+    const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false, title: '雪哨' };
     if (left !== undefined) { createData.left = Math.round(left); createData.top = Math.round(top); }
     const branch = area && browser ? '屏幕右+浏览器内容区下方' : (area ? '仅屏幕' : '默认');
     log('弹窗定位 → left=' + Math.round(left) + ' top=' + Math.round(top) + ' 策略:' + branch + ' (屏右=' + (area ? area.left + area.width : '?') + ' 浏览器top=' + (browser ? browser.top : '?') + ')');
