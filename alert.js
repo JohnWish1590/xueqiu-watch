@@ -1,7 +1,17 @@
 // alert.js — 特别关注提醒窗：同人合并 + 常驻 + 右侧滑入 + 已读消隐 + 全读完自动关
 // 每条卡片 = 一个博主（可含多条未读新帖，右上角数字角标）
 
-const AVATAR_COLORS = ['#1E6FFF', '#534AB7', '#1D9E75', '#378ADD', '#BA7517', '#D4537E', '#639922', '#0F6E56'];
+// 马卡龙低饱和色系（柔和、不刺眼、有质感）
+const AVATAR_COLORS = [
+  '#86B4C9',  // 柔蓝
+  '#A8B5A0',  // 鼠尾草绿
+  '#D4A5A5',  // 藕粉
+  '#C9B8A8',  // 奶茶
+  '#A5ADC4',  // 雾霾蓝
+  '#C4B5AA',  // 杏仁
+  '#B8ADA0',  // 灰绿
+  '#BCA5C4',  // 淡紫
+];
 function colorFor(name) {
   let h = 0;
   for (const c of String(name || '雪')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
