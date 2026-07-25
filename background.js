@@ -812,12 +812,29 @@ async function openAlertWindow() {
     } else {
       left = undefined; top = undefined;
     }
-    const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false };
+    const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false, state: 'normal' };
     if (left !== undefined) { createData.left = Math.round(left); createData.top = Math.round(top); }
     const branch = area && browser ? '屏幕右+浏览器内容区下方' : (area ? '仅屏幕' : '默认');
     log('弹窗定位 → left=' + Math.round(left) + ' top=' + Math.round(top) + ' 策略:' + branch + ' (屏右=' + (area ? area.left + area.width : '?') + ' 浏览器top=' + (browser ? browser.top : '?') + ')');
     const w = await chrome.windows.create(createData);
     alertWinIds.add(w.id);
+
+    // 贴边校正（关键）：Windows 上 type:'popup' 创建后，系统边框 / DWM 会让实际右边界
+    // 比设定值左移几像素，留下可见间隙。这里创建后读回实际位置，把右侧间隙补平。
+    try {
+      const actual = await chrome.windows.get(w.id);
+      if (actual && area) {
+        const wantRight = area.left + area.width;                       // 屏幕右物理边界
+        const actualRight = (actual.left || 0) + (actual.width || W);   // 窗口实际右边界
+        const gap = wantRight - actualRight;                            // >0 = 右侧有间隙
+        if (Math.abs(gap) > 1) {
+          await chrome.windows.update(w.id, { left: Math.round((actual.left || 0) + gap) });
+          log('贴边校正 → 目标右边界=' + wantRight + ' 实际右边界=' + actualRight + ' 右移=' + gap + 'px');
+        } else {
+          log('贴边校正 → 已贴合（间隙=' + gap + 'px，无需调整）');
+        }
+      }
+    } catch (e) { /* 校正失败不影响主流程 */ }
   } catch (e) {
     logErr('弹窗创建失败：', e.message);
   }
