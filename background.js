@@ -795,7 +795,7 @@ async function openAlertWindow() {
       try { await chrome.runtime.sendMessage({ type: 'alertRefresh' }); } catch (e) {}
       return;
     }
-    const W = 420, H = 480;
+    const W = 440, H = 500;
     let left, top;
 
     // 横向：贴**屏幕**右边缘（不是浏览器窗口右边缘——浏览器可能没全屏）
