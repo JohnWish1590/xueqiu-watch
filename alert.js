@@ -21,6 +21,34 @@ function postUrl(userId, postId) {
   return `https://xueqiu.com/${userId || '0'}/${postId}`;
 }
 
+// 按内容实测高度自适应窗口高度：1 人少量帖 → 紧凑；多人多帖 → 自动增高。
+// 上下（header / footer）固定，中间列表区随内容伸缩，夹在 [MIN, MAX] 之间（超出滚动）。
+function measureContentHeight() {
+  const list = document.getElementById('list');
+  if (!list) return 0;
+  let h = 0;
+  const rows = list.querySelectorAll('.row');
+  rows.forEach(r => { h += r.offsetHeight; });
+  if (!document.body.classList.contains('layout-inbox') && rows.length > 1) {
+    h += 10 * (rows.length - 1); // 卡片布局的卡片间距 margin-bottom
+  }
+  const cs = getComputedStyle(list);
+  h += (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  return h;
+}
+function resizeToContent() {
+  try {
+    const hd = document.querySelector('.hd');
+    const ft = document.querySelector('.ft');
+    const hdH = hd ? hd.offsetHeight : 44;
+    const ftH = ft ? ft.offsetHeight : 32;
+    const desired = hdH + measureContentHeight() + ftH;
+    const MIN = 240, MAX = 540;
+    const h = Math.max(MIN, Math.min(MAX, Math.round(desired)));
+    chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { height: h });
+  } catch (e) {}
+}
+
 function groupUnread(items) {
   const unread = (items || []).filter(p => !p.read);
   const groups = new Map();
@@ -48,11 +76,12 @@ function render() {
     if (!merged.length) {
       document.getElementById('total').textContent = '';
       list.innerHTML = '<div class="empty">🎉 全部已读，没有新帖<br><span style="font-size:11px;color:var(--subtitle);">本窗口即将自动关闭…</span></div>';
+      resizeToContent();
       setTimeout(() => window.close(), 1500);
       return;
     }
 
-    document.getElementById('total').textContent = `${merged.length} 人 · ${unreadTotal} 条未读`;
+    document.getElementById('total').textContent = `★ ${merged.length} 人 · ${unreadTotal} 条未读`;
 
     merged.forEach(g => {
       const latest = g.posts[0];
@@ -70,6 +99,7 @@ function render() {
       row.addEventListener('click', () => onRowClick(row, g, latest));
       list.appendChild(row);
     });
+    resizeToContent();
   });
 }
 
@@ -111,6 +141,7 @@ document.getElementById('markAll').addEventListener('click', async () => {
     const list = document.getElementById('list');
     list.innerHTML = '<div class="empty" style="color:#1E6FFF;font-size:13px;">✅ 已全部标记为已读</div>';
     document.getElementById('total').textContent = '';
+    resizeToContent();
     setTimeout(() => window.close(), 800);
   }, 350);
 });
@@ -125,13 +156,13 @@ async function applyAppearance() {
   } catch (e) {}
 }
 
-// 贴边精校：弹窗内部用 window.screen 坐标（与 chrome.windows.create 同一坐标系，不受 DPI 缩放影响）
-// 计算右侧间隙并右移，确保真正紧贴物理屏幕右边缘（background.js 的校正可能因 DPI 坐标偏差失效，这里兜底）。
+// 贴边精校（兜底）：用弹窗自身所在屏幕的坐标（availLeft + availWidth），
+// 不受多屏 / 主屏错位影响，把右侧残余间隙补平。background.js 已先按浏览器屏幕算过一次。
 function snapToRight() {
   try {
-    const screenW = window.screen.width;
+    const screenRight = (window.screen.availLeft || 0) + (window.screen.availWidth || window.screen.width || 0);
     const curRight = window.screenX + window.outerWidth;
-    const gap = screenW - curRight;
+    const gap = screenRight - curRight;
     if (gap > 1) {
       chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: Math.round(window.screenX + gap) });
       uiLog('INFO', '弹窗内部贴边校正 → 右移=' + Math.round(gap) + 'px');
@@ -144,10 +175,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'alertRefresh') render();
 });
 
-// 先应用外观（加 body class），再渲染，避免样式闪烁；随后分两次贴边精校（窗口刚建时坐标可能未稳定）
+// 先应用外观（加 body class），再渲染，避免样式闪烁；渲染后按内容自适应高度 + 贴边兜底
+// 分多个时间点调用，覆盖字体加载、动画结束等坐标未稳定的瞬间。
 (async () => {
   await applyAppearance();
   render();
-  setTimeout(snapToRight, 60);
-  setTimeout(snapToRight, 350);
+  setTimeout(() => { resizeToContent(); snapToRight(); }, 80);
+  setTimeout(() => { resizeToContent(); snapToRight(); }, 400);
+  setTimeout(resizeToContent, 900);
 })();
