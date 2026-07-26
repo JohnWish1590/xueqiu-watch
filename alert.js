@@ -22,7 +22,6 @@ function postUrl(userId, postId) {
 }
 
 // 按内容实测高度自适应窗口高度：1 人少量帖 → 紧凑；多人多帖 → 自动增高。
-// 上下（header / footer）固定，中间列表区随内容伸缩，夹在 [MIN, MAX] 之间（超出滚动）。
 function measureContentHeight() {
   const list = document.getElementById('list');
   if (!list) return 0;
@@ -30,7 +29,7 @@ function measureContentHeight() {
   const rows = list.querySelectorAll('.row');
   rows.forEach(r => { h += r.offsetHeight; });
   if (!document.body.classList.contains('layout-inbox') && rows.length > 1) {
-    h += 10 * (rows.length - 1); // 卡片布局的卡片间距 margin-bottom
+    h += 10 * (rows.length - 1);
   }
   const cs = getComputedStyle(list);
   h += (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
@@ -81,7 +80,7 @@ function render() {
       return;
     }
 
-    document.getElementById('total').textContent = `★ ${merged.length} 人 · ${unreadTotal} 条未读`;
+    document.getElementById('total').textContent = `${merged.length} 人 · ${unreadTotal} 条未读`;
 
     merged.forEach(g => {
       const latest = g.posts[0];
@@ -125,14 +124,14 @@ function onRowClick(row, group, latest) {
     });
 }
 
-// 关闭按钮：关掉所有 alert 弹窗（含跨 SW 重启遗留的孤儿窗口）
+// 关闭按钮
 document.getElementById('close').addEventListener('click', () => {
   uiLog('INFO', '点击「关闭」→ 关闭全部弹窗');
   try { chrome.runtime.sendMessage({ type: 'closeAllAlertWindows' }); } catch (e) {}
   window.close();
 });
 
-// 已读全部：标记全部已读 + 关掉所有 alert 弹窗
+// 已读全部
 document.getElementById('markAll').addEventListener('click', async () => {
   uiLog('INFO', '点击「已读全部」→ 标记已读并关闭全部弹窗');
   try { await chrome.runtime.sendMessage({ type: 'closeAllAlerts' }); } catch (e) { uiLog('ERROR', '全部已读并关闭失败：' + e.message); }
@@ -146,7 +145,7 @@ document.getElementById('markAll').addEventListener('click', async () => {
   }, 350);
 });
 
-// 应用外观设置（布局 + 主题），由设置页存储，弹窗启动时读取
+// 应用外观设置（布局 + 主题）
 async function applyAppearance() {
   try {
     const s = await new Promise(r => chrome.storage.local.get('appearance', r));
@@ -156,31 +155,55 @@ async function applyAppearance() {
   } catch (e) {}
 }
 
-// 贴边精校（兜底）：用弹窗自身所在屏幕的坐标（availLeft + availWidth），
-// 不受多屏 / 主屏错位影响，把右侧残余间隙补平。background.js 已先按浏览器屏幕算过一次。
+// ═══════════════════════════════════════════════════
+// 贴边精校（核心定位逻辑，完全由弹窗内部完成）
+//
+// background.js 只负责创建窗口并给一个大概位置。
+// 真正的精确定位由这里完成——因为只有弹窗内部的 JS 能拿到
+// 与 Chrome 渲染引擎一致的 screen 坐标（window.screenX / outerWidth / availWidth），
+// 不受多屏 / DPI / system.display 坐标系偏差影响。
+// ═══════════════════════════════════════════════════
 function snapToRight() {
   try {
-    const screenRight = (window.screen.availLeft || 0) + (window.screen.availWidth || window.screen.width || 0);
+    // 用弹窗所在屏幕的可用区域右边界（最可靠——与渲染坐标同源）
+    const availLeft = window.screen.availLeft || window.screen.left || 0;
+    const availWidth = window.screen.availWidth || window.screen.width || 1920;
+    const screenRight = availLeft + availWidth;
+
     const curRight = window.screenX + window.outerWidth;
     const gap = screenRight - curRight;
-    if (gap > 1) {
-      chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: Math.round(window.screenX + gap) });
-      uiLog('INFO', '弹窗内部贴边校正 → 右移=' + Math.round(gap) + 'px');
+
+    uiLog('INFO', '贴边检测 → 屏幕右=' + screenRight + ' 窗口右=' + curRight + ' gap=' + gap + 'px (availLeft=' + availLeft + ' availWidth=' + availWidth + ' screenX=' + window.screenX + ' outerW=' + window.outerWidth + ')');
+
+    if (gap > 2) {
+      const newLeft = Math.round(window.screenX + gap);
+      chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
+      uiLog('INFO', '贴边校正 → 左=' + newLeft + ' (右移+' + Math.round(gap) + 'px)');
+    } else if (gap < -5) {
+      // 窗口超出屏幕右边界（不太可能但防一下），往左拉回
+      const newLeft = Math.round(window.screenX + gap);
+      chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
+      uiLog('INFO', '贴边回正 → 左=' + newLeft + ' (左移' + Math.round(gap) + 'px)');
+    } else {
+      uiLog('INFO', '贴边OK → gap=' + Math.round(gap) + 'px（无需调整）');
     }
-  } catch (e) {}
+  } catch (e) {
+    uiLog('ERROR', '贴边校正异常：' + e.message);
+  }
 }
 
-// 窗口已开时，background 会发 alertRefresh 让本页重渲染最新列表
+// 窗口刷新消息
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'alertRefresh') render();
 });
 
-// 先应用外观（加 body class），再渲染，避免样式闪烁；渲染后按内容自适应高度 + 贴边兜底
-// 分多个时间点调用，覆盖字体加载、动画结束等坐标未稳定的瞬间。
+// 初始化流程：应用外观 → 渲染 → 多次贴边+高度校正（覆盖字体加载/动画/DWM 稳定等时机）
 (async () => {
   await applyAppearance();
   render();
-  setTimeout(() => { resizeToContent(); snapToRight(); }, 80);
-  setTimeout(() => { resizeToContent(); snapToRight(); }, 400);
-  setTimeout(resizeToContent, 900);
+  // 分 4 个时间点调用，确保在 DWM / 字体渲染 / 动画结束后都能校正到位
+  setTimeout(() => { snapToRight(); resizeToContent(); }, 60);
+  setTimeout(() => { snapToRight(); resizeToContent(); }, 250);
+  setTimeout(() => { snapToRight(); resizeToContent(); }, 600);
+  setTimeout(resizeToContent, 1200);
 })();
