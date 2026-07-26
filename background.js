@@ -746,18 +746,32 @@ async function closeAllAlertWindows() {
   } catch (e) {}
 }
 
-// 拿主屏信息：横向用 bounds（完整屏幕宽度，确保贴边无间隙），纵向用 workArea（避开任务栏）
+// 依据某个点（窗口中心）找到它所在的屏幕，返回该屏幕的 display 信息（bounds 用于横向贴边）
+async function getScreenForRect(centerX, centerY) {
+  try {
+    if (chrome.system && chrome.system.display && chrome.system.display.getInfo) {
+      const infos = await chrome.system.display.getInfo();
+      for (const d of (infos || [])) {
+        const b = d.bounds || {};
+        const l = b.left || 0, t = b.top || 0, w = b.width || 0, h = b.height || 0;
+        if (centerX >= l && centerX <= l + w && centerY >= t && centerY <= t + h) return d;
+      }
+      // 没命中（理论上不会）就退到主屏
+      return (infos || []).find(x => x.isPrimary) || (infos || [])[0] || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// 拿主屏信息（兜底用）：完整屏幕边界
 async function getPrimaryDisplayBounds() {
   try {
     if (chrome.system && chrome.system.display && chrome.system.display.getInfo) {
       const infos = await chrome.system.display.getInfo();
-      // 优先主屏，其次第一块
       const d = (infos || []).find(x => x.isPrimary) || (infos || [])[0];
       if (d) {
-        // 返回合并值：横坐标用完整屏幕边界（bounds），纵坐标用工作区（workArea）
-        // 这样 left 能精确贴到物理屏幕右边缘，top 又不会盖住底部任务栏
-        const wa = d.workArea || {};
         const b = d.bounds || {};
+        const wa = d.workArea || {};
         return { left: b.left || 0, top: wa.top || 0, width: b.width || wa.width || 0, height: wa.height || 0 };
       }
     }
@@ -795,41 +809,43 @@ async function openAlertWindow() {
       try { await chrome.runtime.sendMessage({ type: 'alertRefresh' }); } catch (e) {}
       return;
     }
-    const W = 440, H = 500;
-    let left, top;
+    const W = 440, H = 360;
+    let left, top, screenRight;
 
-    // 横向：贴**屏幕**右边缘（不是浏览器窗口右边缘——浏览器可能没全屏）
-    // 纵向：从**浏览器窗口**顶部 + chrome 高度开始（落在地址栏/书签栏下方）
-    const area = await getPrimaryDisplayBounds();
+    // 横向：贴「浏览器窗口所在屏幕」的右边缘（不是主屏——多屏 / DPI 下用浏览器实际屏幕
+    // 才能拿到与 windows.create 同一坐标系的右边界，从根消除右侧留白）。
+    // 纵向：从浏览器窗口顶部 + chrome 高度开始（落在地址栏 / 书签栏下方）。
     const browser = await getActiveBrowserWindow();
-    if (area && browser) {
-      left = area.left + area.width - W;           // 贴屏幕右 0px
-      top = browser.top + BROWSER_CHROME_HEIGHT;   // 浏览器顶部 + 150（标签+地址+书签栏）
-    } else if (area) {
-      // 兜底：只有屏幕信息
-      left = area.left + area.width - W;
-      top = area.top + 80;
+    if (browser) {
+      const d = await getScreenForRect((browser.left || 0) + (browser.width || 0) / 2, (browser.top || 0) + (browser.height || 0) / 2);
+      const b = (d && d.bounds) || null;
+      screenRight = b ? (b.left || 0) + (b.width || 0) : ((browser.left || 0) + (browser.width || 0));
+      left = screenRight - W;                        // 贴该屏幕右边缘 0px
+      top = (browser.top || 0) + BROWSER_CHROME_HEIGHT;
     } else {
-      left = undefined; top = undefined;
+      const area = await getPrimaryDisplayBounds();
+      screenRight = area ? area.left + area.width : undefined;
+      left = area ? area.left + area.width - W : undefined;
+      top = area ? area.top + 80 : undefined;
     }
+
     const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false, state: 'normal' };
     if (left !== undefined) { createData.left = Math.round(left); createData.top = Math.round(top); }
-    const branch = area && browser ? '屏幕右+浏览器内容区下方' : (area ? '仅屏幕' : '默认');
-    log('弹窗定位 → left=' + Math.round(left) + ' top=' + Math.round(top) + ' 策略:' + branch + ' (屏右=' + (area ? area.left + area.width : '?') + ' 浏览器top=' + (browser ? browser.top : '?') + ')');
+    const branch = browser ? '浏览器所在屏幕右' : '主屏右';
+    log('弹窗定位 → left=' + Math.round(left) + ' top=' + Math.round(top) + ' 策略:' + branch + ' (屏右=' + (screenRight != null ? screenRight : '?') + ')');
     const w = await chrome.windows.create(createData);
     alertWinIds.add(w.id);
 
-    // 贴边校正（关键）：Windows 上 type:'popup' 创建后，系统边框 / DWM 会让实际右边界
-    // 比设定值左移几像素，留下可见间隙。这里创建后读回实际位置，把右侧间隙补平。
+    // 贴边校正（关键）：创建后读回实际位置，用「同一屏幕右边界」补平右侧间隙。
+    // 不再用主屏坐标，避免多屏下跨屏错位导致校正失效 / 反向拉出空隙。
     try {
       const actual = await chrome.windows.get(w.id);
-      if (actual && area) {
-        const wantRight = area.left + area.width;                       // 屏幕右物理边界
+      if (actual && screenRight != null) {
         const actualRight = (actual.left || 0) + (actual.width || W);   // 窗口实际右边界
-        const gap = wantRight - actualRight;                            // >0 = 右侧有间隙
+        const gap = screenRight - actualRight;                          // >0 = 右侧有间隙
         if (Math.abs(gap) > 1) {
           await chrome.windows.update(w.id, { left: Math.round((actual.left || 0) + gap) });
-          log('贴边校正 → 目标右边界=' + wantRight + ' 实际右边界=' + actualRight + ' 右移=' + gap + 'px');
+          log('贴边校正 → 目标右边界=' + screenRight + ' 实际右边界=' + actualRight + ' 右移=' + gap + 'px');
         } else {
           log('贴边校正 → 已贴合（间隙=' + gap + 'px，无需调整）');
         }
