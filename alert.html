@@ -79,6 +79,13 @@
     }
     .hd button.btn-g { border-color: var(--btn-g-border); color: var(--btn-g-color); padding: 3px 12px; }
     .hd button:hover { opacity: .7; }
+    /* 头部右侧弹性占位：把已读全部/关闭/主题切换推到最右 */
+    .hd-spacer { flex: 1 1 auto; }
+    /* 明亮/黑暗分段按钮：紧贴关闭按钮右侧，靠右对齐 */
+    .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 0; margin-left: 2px; }
+    .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 10px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; }
+    .hd .theme-toggle .theme-btn.active { background: var(--logo-color); color: #fff; }
+    .hd .theme-toggle .theme-btn:hover { opacity: .85; }
 
     /* ── 消息列表 ── */
     .list {
@@ -162,8 +169,13 @@
 <body>
   <div class="hd">
     <span class="total" id="total"></span>
+    <span class="hd-spacer"></span>
     <button id="markAll">已读全部</button>
     <button id="close" class="btn-g">关闭</button>
+    <span class="theme-toggle">
+      <button id="themeLight" class="theme-btn">明亮</button>
+      <button id="themeDark" class="theme-btn">黑暗</button>
+    </span>
   </div>
   <div class="list" id="list"></div>
   <div class="ft">点击卡片打开并标记已读 · 3分钟未操作自动关闭</div>
