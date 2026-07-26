@@ -701,14 +701,50 @@ async function closeOffscreen() {
 }
 
 // ---------- 弹窗（贴屏幕右边缘 + 浏览器内容区下方） ----------
-// 用「窗口集合 + 真实扫描」维护，而非单一内存变量。
-// 原因：MV3 的 service worker 会被系统频繁重启，内存变量会归零，
-// 但上一辈子 SW 开出来的弹窗仍开着 → 新 SW 误以为没窗口又新建，
-// 半小时就能堆出几十个孤儿窗口。扫描当前真实窗口可跨 SW 重启复用。
+// 用「窗口集合 + 持久化 + 真实扫描」三重保障维护，杜绝孤儿窗口。
+//
+// 根因（v1.4.3 及以前反复出现空白 chrome://newtab 窗口）：
+//   ① MV3 Service Worker 会被浏览器空闲 ~5 分钟后杀掉 → 内存变量全部归零
+//   ② 之前创建的 alert 弹窗还在屏幕上，但 SW 已不知道它的 id
+//   ③ 扩展更新/重载后，弹窗 URL 从 chrome-extension://xxx/alert.html 变成
+//      chrome://newtab（Chrome 对失效扩展页面的默认回退）
+//   ④ 新 SW 的 findExistingAlertWin() 只认 url.contains('alert.html') → 匹配不上孤儿
+//   ⑤ 以为没窗口 → 又新建 → maybeRepopAlert 每轮轮询都触发 → 堆出几十个孤儿
+//
+// 修复：
+//   - alertWinIds 持久化到 storage（跨 SW 重启不丢）
+//   - 扫描时也认 newtab/orphan popup（按尺寸+位置兜底匹配）
+//   - 创建前先清理孤儿，创建后验证 URL
+//   - maybeRepopAlert 加防抖（短时间不重复创建）
+const ALERT_WINS_KEY = 'alertWinIds';
 const alertWinIds = new Set();
 
-// 找当前还活着的 alert 弹窗（优先集合，兜底扫全部 popup）
+// 持久化 alertWinIds 到 storage（防 SW 重启丢失）
+async function persistAlertWinIds() {
+  try {
+    await chrome.storage.local.set({ [ALERT_WINS_KEY]: [...alertWinIds] });
+  } catch (e) {}
+}
+
+// 从 storage 恢复 alertWinIds（冷启动时调用）
+async function restoreAlertWinIds() {
+  try {
+    const stored = await chrome.storage.local.get(ALERT_WINS_KEY);
+    const ids = stored[ALERT_WINS_KEY];
+    if (Array.isArray(ids)) {
+      for (const id of ids) alertWinIds.add(id);
+    }
+  } catch (e) {}
+}
+
+// 冷启动时立即恢复（在日志恢复之后）
+(async () => { await restoreAlertWinIds(); })();
+
+// 找当前还活着的 alert 弹窗（三重匹配：集合 ID → alert.html URL → 孤儿兜底）
 async function findExistingAlertWin() {
+  const myId = chrome.runtime.id;
+
+  // ① 先查内存集合里的 ID（最快路径）
   for (const id of [...alertWinIds]) {
     try {
       const win = await chrome.windows.get(id, { populate: false });
@@ -716,30 +752,55 @@ async function findExistingAlertWin() {
       alertWinIds.delete(id);
     } catch (e) { alertWinIds.delete(id); }
   }
+
+  // ② 扫描所有 popup 窗口，找 URL 含 alert.html 的（正常弹窗）
   try {
     const all = await chrome.windows.getAll({ populate: true, windowTypes: ['popup'] });
-    const myId = chrome.runtime.id;
     for (const w of all || []) {
       const url = (w.tabs && w.tabs[0] && w.tabs[0].url) || w.url || '';
       if (url.indexOf('alert.html') !== -1 || (myId && url.indexOf(myId) !== -1 && url.indexOf('alert') !== -1)) {
         alertWinIds.add(w.id);
+        await persistAlertWinIds();
         return w;
+      }
+    }
+
+    // ③ 兜底：找「疑似孤儿」的 popup 窗口
+    // 特征：URL 是 chrome://newtab / about:blank，且尺寸接近我们的弹窗（宽 380~500，高 200~600）
+    // 这些很可能是扩展更新后 URL 失效的旧 alert 弹窗
+    for (const w of all || []) {
+      const url = (w.tabs && w.tabs[0] && w.tabs[0].url) || w.url || '';
+      if (url === 'chrome://newtab' || url === 'about:blank' || (!url.startsWith('http') && url.indexOf('alert') === -1 && !url.startsWith('chrome-extension'))) {
+        const ww = w.width || 0;
+        const wh = w.height || 0;
+        if (ww >= 380 && ww <= 500 && wh >= 200 && wh <= 600) {
+          log('发现疑似孤儿弹窗 id=' + w.id + ' url=' + url + ' 尺寸=' + ww + 'x' + wh + ' → 当作 alert 孤儿复用');
+          alertWinIds.add(w.id);
+          await persistAlertWinIds();
+          return w;
+        }
       }
     }
   } catch (e) {}
   return null;
 }
 
-// 关掉所有 alert 弹窗：集合里的 + 兜底扫到的（覆盖 SW 重启遗留的孤儿窗口）
+// 关掉所有 alert 弹窗：集合里的 + 兜底扫到的 + 孤儿窗口（覆盖 SW 重启遗留）
 async function closeAllAlertWindows() {
   const ids = [...alertWinIds];
   for (const id of ids) { try { await chrome.windows.remove(id); } catch (e) {} }
   alertWinIds.clear();
+  await persistAlertWinIds();
   try {
     const all = await chrome.windows.getAll({ populate: true, windowTypes: ['popup'] });
     for (const w of all || []) {
       const url = (w.tabs && w.tabs[0] && w.tabs[0].url) || w.url || '';
-      if (url.indexOf('alert.html') !== -1) {
+      // 关闭 alert.html 的 + 疑似孤儿的（newtab/blank + 弹窗尺寸）
+      const isAlert = url.indexOf('alert.html') !== -1;
+      const isOrphan = (url === 'chrome://newtab' || url === 'about:blank') &&
+        (w.width || 0) >= 380 && (w.width || 0) <= 500 &&
+        (w.height || 0) >= 200 && (w.height || 0) <= 600;
+      if (isAlert || isOrphan) {
         try { await chrome.windows.remove(w.id); } catch (e) {}
       }
     }
@@ -766,19 +827,28 @@ const BROWSER_CHROME_HEIGHT = 150;
 
 async function openAlertWindow() {
   try {
-    // 关键修复：先真实扫描当前是否已有 alert 弹窗（跨 SW 重启也能复用），
+    // 关键修复（v1.4.4）：先真实扫描当前是否已有 alert 弹窗（跨 SW 重启也能复用），
     // 有就聚焦 + 重渲染，绝不新建第二个 → 杜绝堆出几十个窗口。
     const existing = await findExistingAlertWin();
     if (existing) {
+      // 如果找到的是孤儿窗口（URL 不是 alert.html），尝试导航到正确 URL
+      const url = (existing.tabs && existing.tabs[0] && existing.tabs[0].url) || '';
+      if (url.indexOf('alert.html') === -1) {
+        log('复用孤儿弹窗 id=' + existing.id + '（原url=' + url + '）→ 导航到 alert.html');
+        try { await chrome.tabs.update(existing.tabs[0].id, { url: 'alert.html' }); } catch (e) {}
+      }
       await chrome.windows.update(existing.id, { focused: true }).catch(() => {});
       try { await chrome.runtime.sendMessage({ type: 'alertRefresh' }); } catch (e) {}
       return;
     }
 
+    // 创建前先清理残留的孤儿 popup 窗口（防止堆积）
+    await cleanupOrphanPopups();
+
     // 创建弹窗：只给一个保守的「偏右」位置作为初始落点。
     // 精确贴边完全由 alert.js 内部的 snapToRight() 完成——它用 window.screen 坐标
     // （与渲染引擎同源），不受多屏 / DPI / system.display 坐标系偏差影响。
-    const W = 440, H = 360;
+    const W = 440, H = 420;
     let left, top;
 
     // 纵向：从浏览器窗口顶部 + chrome 高度开始（落在地址栏/书签栏下方）
@@ -798,13 +868,57 @@ async function openAlertWindow() {
     log('弹窗创建 → left=' + (left != null ? Math.round(left) : '默认') + ' top=' + (top != null ? Math.round(top) : '默认') + ' (精确定位由 alert.js snapToRight 完成)');
     const w = await chrome.windows.create(createData);
     alertWinIds.add(w.id);
+    await persistAlertWinIds();
     log('弹窗已创建 id=' + w.id + '，等待 alert.js 内部贴边校正…');
+
+    // 延迟验证：确认窗口确实加载了 alert.html（而非回退到 newtab）
+    setTimeout(async () => {
+      try {
+        const check = await chrome.windows.get(w.id, { populate: true });
+        const actualUrl = (check.tabs && check.tabs[0] && check.tabs[0].url) || '';
+        if (actualUrl.indexOf('alert.html') === -1) {
+          logErr('弹窗验证失败！id=' + w.id + ' 实际URL=' + actualUrl + '（预期 alert.html）→ 尝试关闭此异常窗口');
+          try { await chrome.windows.remove(w.id); } catch (e) {}
+          alertWinIds.delete(w.id);
+          await persistAlertWinIds();
+        }
+      } catch (e) {
+        // 窗口已不存在，从集合清除
+        alertWinIds.delete(w.id);
+        await persistAlertWinIds();
+      }
+    }, 3000);
   } catch (e) {
     logErr('弹窗创建失败：', e.message);
   }
 }
-// 窗口被关闭时从集合移除（跨 SW 重启的孤儿窗口由扫描兜底处理）
-chrome.windows.onRemoved.addListener(id => { alertWinIds.delete(id); });
+
+// 清理疑似孤儿的 popup 窗口（chrome://newtab / about:blank + 弹窗尺寸）
+// 在创建新弹窗前调用，防止堆积
+async function cleanupOrphanPopups() {
+  try {
+    const all = await chrome.windows.getAll({ populate: true, windowTypes: ['popup'] });
+    for (const w of all || []) {
+      // 跳过我们已知管理的窗口
+      if (alertWinIds.has(w.id)) continue;
+      const url = (w.tabs && w.tabs[0] && w.tabs[0].url) || w.url || '';
+      const isOrphan = (url === 'chrome://newtab' || url === 'about:blank' || url === '') &&
+        (w.width || 0) >= 380 && (w.width || 0) <= 500 &&
+        (w.height || 0) >= 200 && (w.height || 0) <= 600;
+      if (isOrphan) {
+        log('清理孤儿 popup id=' + w.id + ' url=' + url + ' 尺寸=' + (w.width||0) + 'x' + (w.height||0));
+        try { await chrome.windows.remove(w.id); } catch (e) {}
+      }
+    }
+  } catch (e) {}
+}
+// 窗口被关闭时从集合移除 + 持久化（跨 SW 重启的孤儿窗口由扫描兜底处理）
+chrome.windows.onRemoved.addListener(async (id) => {
+  if (alertWinIds.has(id)) {
+    alertWinIds.delete(id);
+    await persistAlertWinIds();
+  }
+});
 
 // ---------- 已读管理 + 3分钟未读完重弹 ----------
 // recent 每条结构：{ id, userId, name, text, ts, read }（read 默认 undefined=未读）
@@ -832,6 +946,9 @@ async function noteNewPostsArrived() {
 }
 
 const REPOP_MS = 3 * 60 * 1000; // 3 分钟
+let lastRepopTime = 0;           // 防抖：记录上次实际执行重弹的时间戳
+const REPOP_DEBOUNCE_MS = 60 * 1000; // 重弹冷却：两次重弹至少间隔 1 分钟
+
 async function maybeRepopAlert() {
   const unread = await unreadCount();
   if (!unread) return;                       // 全读完了，不重弹
@@ -839,8 +956,11 @@ async function maybeRepopAlert() {
   if (live) return;                          // 窗口已开着（真实扫描），不重弹 → 复用而非新建
   const { lastNewPostAt } = await chrome.storage.local.get(['lastNewPostAt']);
   if (!lastNewPostAt) return;
+  // 防抖：距上次重弹不到 1 分钟 → 跳过（避免 SW 重启后每轮轮询都重复创建）
+  if (Date.now() - lastRepopTime < REPOP_DEBOUNCE_MS) return;
   if (Date.now() - lastNewPostAt >= REPOP_MS) {
     log(`3 分钟已过仍有 ${unread} 条未读，重新弹出提醒窗口`);
+    lastRepopTime = Date.now();
     await openAlertWindow();
     // 重弹后更新计时起点，避免每轮轮询都弹（相当于再给你 3 分钟）
     await chrome.storage.local.set({ lastNewPostAt: Date.now() });
