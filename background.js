@@ -842,7 +842,7 @@ async function openAlertWindow() {
     // 精确贴边完全交给 alert.js 内部的 snapToRight()（用 window.screen 坐标，
     // 即窗口实际所在屏的宽高，天然适配多屏 / DPI）。Chrome 会把新窗口建在
     // 当前活动屏幕，snapToRight 再把它推到该屏右边缘。
-    const W = 440, H = 520;
+    const W = 440, H = 360;
     const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false };
     log('弹窗创建 → 不预设位置（由 alert.js snapToRight 精确定位到当前屏右边缘）');
     const w = await chrome.windows.create(createData);

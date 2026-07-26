@@ -21,6 +21,11 @@ function postUrl(userId, postId) {
   return `https://xueqiu.com/${userId || '0'}/${postId}`;
 }
 
+// 浏览器顶部 chrome（标签栏 + 地址栏 + 可能的收藏夹栏）高度估算。
+// 弹窗垂直锚定在「当前屏内容区顶部 + 此留白」处，刚好落在标签栏下方，
+// 不再依赖 Chrome 默认位置（默认会落在屏幕顶端、盖住标签栏）。
+const BROWSER_CHROME_HEIGHT = 150;
+
 // ── 文字截断由 CSS 完成 ──
 // .summary 用 -webkit-line-clamp:2 限制最多 2 行，超出显示省略号
 // 卡片 .row 用 overflow:hidden 保证内容不溢出圆角框（包括 CJK 字符）
@@ -50,7 +55,7 @@ function resizeToContent() {
     // 必须加上 outerHeight - innerHeight 的差值，否则内容会被标题栏截断
     const chromeDelta = window.outerHeight - window.innerHeight;
     const desired = hdH + contentH + ftH + chromeDelta;
-    const MIN = 240, MAX = 600;
+    const MIN = 240, MAX = 540;
     const h = Math.max(MIN, Math.min(MAX, Math.round(desired)));
     chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { height: h });
     uiLog('INFO', '高度自适应 => 内容=' + contentH + ' +头尾=' + (hdH+ftH) + ' +标题栏=' + chromeDelta + ' => 设定=' + h + 'px');
@@ -296,6 +301,42 @@ function snapToRight(round) {
   }
 }
 
+// 垂直锚定：贴在「当前屏」浏览器内容区顶部（避开标签栏 / 地址栏）。
+// 与 snapToRight 同一思路——用 chrome.system.display 取真实显示器边界，
+// 找当前弹窗所在屏，把窗口 top 设为「该屏 workArea 顶部 + 浏览器 chrome 留白」。
+// 对最大化浏览器，这刚好落在标签栏下方；用 update 设置（同 snapToRight 的 left），
+// 不破坏 v1.4.10 在创建时不预设位置以避免多屏 Bounds 错误的设计。
+function snapTop() {
+  try {
+    if (chrome.system && chrome.system.display && chrome.system.display.getInfo) {
+      chrome.system.display.getInfo((disp) => {
+        try {
+          const curX = window.screenX;
+          // 选包含当前弹窗水平位置的屏；找不到就选最右屏（与 snapToRight 一致）
+          let target = null;
+          for (const d of (disp || [])) {
+            const b = d.workArea || d.bounds;
+            if (curX >= b.left && curX < b.left + b.width) { target = b; break; }
+          }
+          if (!target) {
+            let maxRight = -Infinity;
+            for (const d of (disp || [])) {
+              const b = d.workArea || d.bounds;
+              if (b.left + b.width > maxRight) { maxRight = b.left + b.width; target = b; }
+            }
+          }
+          if (!target) { uiLog('WARN', '垂直定位跳过：无可用显示器信息'); return; }
+          const top = Math.round(target.top + BROWSER_CHROME_HEIGHT);
+          uiLog('INFO', '垂直定位 => 屏顶=' + target.top + ' +留白=' + BROWSER_CHROME_HEIGHT + ' => top=' + top);
+          chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { top });
+        } catch (e) {
+          uiLog('ERROR', '垂直定位异常：' + e.message);
+        }
+      });
+    }
+  } catch (e) { /* 无 system.display 权限时跳过，退回 Chrome 默认位置 */ }
+}
+
 // 窗口刷新消息
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'alertRefresh') render();
@@ -311,6 +352,6 @@ const SNAP_TIMELINE = [60, 250, 600, 1200, 2000];
   await applyAppearance();
   render();
   SNAP_TIMELINE.forEach((t) => {
-    setTimeout(() => { snapToRight(1); resizeToContent(); }, t);
+    setTimeout(() => { snapToRight(1); snapTop(); resizeToContent(); }, t);
   });
 })();
