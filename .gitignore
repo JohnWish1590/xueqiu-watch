@@ -5,3 +5,6 @@ create_repo.json
 
 # 依赖（本项目无需 node_modules）
 node_modules/
+
+# 发布产物（Release 资产由 CI/手动上传，不进源码仓库）
+*.zip

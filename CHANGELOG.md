@@ -5,7 +5,21 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
-## [1.4.9] - 2026-07-26
+## [1.4.10] - 2026-07-26
+
+> 🐛 **多显示器弹窗创建失败 + 弹窗宽度/布局反复调试最终定稿**。已装用户请开发者模式重新加载覆盖升级。
+
+### 修复
+- **多显示器弹窗创建失败**：`background.js` 原按浏览器窗口位置算 `left`，副屏下 `left` 超出主屏可见范围 → Chrome 报 `Bounds must be at least 50% within visible screen space` 拒绝创建。改为**不预设 left/top**，由 `alert.js` 的 `snapToRight()` 精确定位。
+- **多屏贴边坐标错误**：`snapToRight()` 原用 `window.screen.width`（窗口所在屏本地宽）配合 `window.screenX`（全局虚拟坐标）→ 副屏 gap 算成负值、推错屏。改为用 `chrome.system.display.getInfo()` 取真实显示器边界，找窗口当前所在屏的 workArea 右沿定位。
+- **弹窗宽度最终定稿 440px（外部）**：
+  - ❌ 曾试 `440 → 360`（太窄，头部「已读全部+关闭+明亮|黑暗」被截断）
+  - ❌ 试 `380` + body 固定 `width:380px`（Chrome 弹窗 `width` 是**外部宽**，内部要扣边框 ~8-10px → 实际 ~370px 容器装不下 380px 内容 → 溢出）
+  - ❌ 去掉 body width 自适应（`outerW` 仅 ~380 → 内部 ~370px 还是不够装头部按钮）
+  - ✅ 最终：`background.js` 窗口外部宽 **440px**（内部 ~430px 够用），`alert.html` body **不设固定 width**，自适应窗口内部空间；头尾按钮一行完整显示。
+- **去掉弹窗内圆角/边框**：`alert.html` 的 `html,body` 原带 `border:1px solid + border-radius:12px`，但 Chrome 弹窗窗口本身有边框，内部再圆角视觉冗余 → 删除（卡片圆角保留）。
+- **滚动条消除**：列表 `overflow-y: auto → hidden`，高度由 `alert.js` 的 `resizeToContent()` 动态测量内容后设置（MIN 240 / MAX 600），不再出现竖滚动条。
+- **关键认知**：Chrome `chrome.windows.create({width})` 的 `width` 是**窗口外部宽**（含 OS 边框），不是页面内容宽。页面 CSS 的 `width` 若等于外部 `width`，必然溢出。弹窗页面应**不设固定 width** 让 body 自适应窗口内部，窗口大小只由 `background.js` 的 `width` 决定。
 
 > 🎛️ **外观微调用户反馈四连**：
 > 1. **主题按钮当前态改蓝色**：「明亮/黑暗」分段按钮激活的那一格用蓝色底白字（与「已读全部」同款 `#1E6FFF`），一眼识别当前主题，不再用红色。
@@ -226,3 +240,41 @@
 [1.2.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.2.0
 [1.1.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.1.0
 [1.0.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.0.0
+
+---
+
+## 附录：常见错误与调试记录（Troubleshooting）
+
+> 本附录汇总开发中**反复踩过的坑**与**高频用户侧问题**，排错先看这里。
+
+### A. 弹窗宽度/布局类
+
+| 现象 | 根因 | 结论 |
+|------|------|------|
+| 头部按钮（已读全部/关闭/明亮\|黑暗）被截断，只显示「明」 | 窗口外部宽不够：Chrome `width` 含 OS 边框，内部实际比设置值小 ~8-10px | 最终外部宽设 **440px**；`alert.html` body **不设固定 width**，自适应 |
+| 页面内容文字溢出、卡片右侧被切 | `alert.html` body 写死 `width:380px`，但窗口内部只有 ~370px | 页面 CSS 永远**不要**用等于窗口外部宽的 px；让 body 流式填充 |
+| 弹窗出现竖直滚动条 | `overflow-y: auto` 在内容略多时出现 | 改为 `hidden`，高度由 `resizeToContent()` 动态测量设置 |
+| 弹窗内圆角看起来怪 | Chrome 弹窗窗口自带边框，内部再 `border-radius` 视觉冗余 | `alert.html` 的 `html,body` **去掉 border 和 radius**（卡片圆角保留） |
+| 弹窗一直是旧样式（无按钮/文字溢出） | 旧版 popup 窗口创建后未关闭，Chrome 不会随扩展代码更新重渲染 | **手动关掉旧弹窗**，新触发的才会用最新代码 |
+
+### B. 多显示器 / 定位类
+
+| 现象 | 根因 | 结论 |
+|------|------|------|
+| `ERROR 弹窗创建失败：Invalid value for bounds. Bounds must be at least 50% within visible screen space.` | `background.js` 按浏览器窗口位置算 `left`，浏览器在副屏时 `left` 超出主屏可见范围 | **不要**在 `chrome.windows.create` 传 left/top；交给 `alert.js` 定位 |
+| `snapToRight` 把弹窗推到错误屏幕 | 用 `window.screen.width`（本地宽）+ `window.screenX`（全局虚拟坐标）混合，副屏 gap 算负 | 改用 `chrome.system.display.getInfo()` 取真实显示器 workArea 右沿 |
+
+### C. 扩展机制类（历史遗留高频）
+
+| 现象 | 根因 | 结论 |
+|------|------|------|
+| 弹窗变成空白 `chrome://newtab` | MV3 Service Worker 空闲被杀 → 内存变量归零 → 扩展更新后弹窗 URL 回退到 newtab | `alertWinIds` 持久化 storage；扫描时也认 newtab 孤儿窗口 |
+| 屏幕堆出几十个孤儿弹窗 | `maybeRepopAlert` 每轮轮询都创建 | 加防抖；创建前先清理孤儿 |
+| 改了代码刷新后没变化 | DevTools 审查视图打开的页面，关 DevTools 页面也跟着关；地址栏直接输 `chrome-extension://.../alert.html` 被 `ERR_BLOCKED_BY_CLIENT` | 用「预览页 `card-preview.html`」验证样式；验证通过就只差关旧弹窗重触发 |
+
+### D. 快速验证清单
+
+1. 样式对不对 → 先开 `card-preview.html` 看（它和弹窗同一套 CSS，除窗口边框外）
+2. 弹窗不刷新 → 关掉所有旧弹窗 → `chrome://extensions` 点刷新 → 重新触发
+3. 多屏创建失败 → 看日志有无 `Bounds must be at least 50%` → 确认 `background.js` 没传 left/top
+4. 头部截断 → 确认 `background.js` 窗口宽 ≥ 440，且 `alert.html` body 无 `width` 定值

@@ -35,14 +35,12 @@
     body.layout-inbox { --avatar-size:32px; }
 
     html, body {
-      width: 440px;
-      height: 100vh;
-      overflow: hidden;
       font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
       background: var(--win-bg);
       color: var(--title);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     body { animation: fadeIn .3s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
@@ -90,7 +88,7 @@
     /* ── 消息列表 ── */
     .list {
       flex: 1;
-      overflow-y: auto;
+      overflow-y: hidden;
       padding: 14px;
       background: transparent;
       scrollbar-width: thin;

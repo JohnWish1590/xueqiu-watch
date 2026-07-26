@@ -845,27 +845,14 @@ async function openAlertWindow() {
     // 创建前先清理残留的孤儿 popup 窗口（防止堆积）
     await cleanupOrphanPopups();
 
-    // 创建弹窗：只给一个保守的「偏右」位置作为初始落点。
-    // 精确贴边完全由 alert.js 内部的 snapToRight() 完成——它用 window.screen 坐标
-    // （与渲染引擎同源），不受多屏 / DPI / system.display 坐标系偏差影响。
-    const W = 440, H = 420;
-    let left, top;
-
-    // 纵向：从浏览器窗口顶部 + chrome 高度开始（落在地址栏/书签栏下方）
-    // 横向：故意往右多留 200px 余量，让 alert.js 的 snapToRight 往左校正到精确位置
-    // （如果直接给"屏幕右-W"，Chrome 可能因内部边距把窗口推得更左，导致反向间隙）
-    const browser = await getActiveBrowserWindow();
-    if (browser) {
-      left = (browser.left || 0) + (browser.width || 0) - W + 200;   // 偏右余量
-      top = (browser.top || 0) + BROWSER_CHROME_HEIGHT;
-    } else {
-      left = undefined;
-      top = undefined;
-    }
-
+    // 创建弹窗：不传 left/top —— 多显示器环境下 background.js 算出的坐标
+    // 很容易落到副屏之外导致 "Bounds must be at least 50% within visible screen space" 错误。
+    // 精确贴边完全交给 alert.js 内部的 snapToRight()（用 window.screen 坐标，
+    // 即窗口实际所在屏的宽高，天然适配多屏 / DPI）。Chrome 会把新窗口建在
+    // 当前活动屏幕，snapToRight 再把它推到该屏右边缘。
+    const W = 440, H = 520;
     const createData = { url: 'alert.html', type: 'popup', width: W, height: H, focused: false };
-    if (left !== undefined) { createData.left = Math.round(left); createData.top = Math.round(top); }
-    log('弹窗创建 → left=' + (left != null ? Math.round(left) : '默认') + ' top=' + (top != null ? Math.round(top) : '默认') + ' (精确定位由 alert.js snapToRight 完成)');
+    log('弹窗创建 → 不预设位置（由 alert.js snapToRight 精确定位到当前屏右边缘）');
     const w = await chrome.windows.create(createData);
     alertWinIds.add(w.id);
     await persistAlertWinIds();

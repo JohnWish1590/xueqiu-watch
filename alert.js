@@ -50,7 +50,7 @@ function resizeToContent() {
     // 必须加上 outerHeight - innerHeight 的差值，否则内容会被标题栏截断
     const chromeDelta = window.outerHeight - window.innerHeight;
     const desired = hdH + contentH + ftH + chromeDelta;
-    const MIN = 240, MAX = 540;
+    const MIN = 240, MAX = 600;
     const h = Math.max(MIN, Math.min(MAX, Math.round(desired)));
     chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { height: h });
     uiLog('INFO', '高度自适应 => 内容=' + contentH + ' +头尾=' + (hdH+ftH) + ' +标题栏=' + chromeDelta + ' => 设定=' + h + 'px');
@@ -234,25 +234,62 @@ document.getElementById('themeDark').addEventListener('click', () => setTheme('d
 function snapToRight(round) {
   round = round || 1;
   try {
+    // 多屏环境下 window.screen.width 是「窗口所在屏的本地宽」，
+    // 但 window.screenX 是「全局虚拟坐标」，两者坐标系不一致 → 副屏算出来 gap 为负、推错屏。
+    // 正确做法：用 chrome.system.display 拿到所有显示器真实边界，
+    // 找窗口当前 screenX 落在哪块屏，再用该屏 workArea 右沿算目标 left。
+    if (chrome.system && chrome.system.display && chrome.system.display.getInfo) {
+      chrome.system.display.getInfo(disp => {
+        try {
+          const curX = window.screenX;
+          const outerW = window.outerWidth;
+          // 选包含当前窗口左边缘的屏；找不到就选最右那块
+          let target = null;
+          for (const d of (disp || [])) {
+            const b = d.workArea || d.bounds;
+            if (curX >= b.left && curX < b.left + b.width) { target = b; break; }
+          }
+          if (!target) {
+            // 兜底：取全局最右屏
+            let maxRight = -Infinity;
+            for (const d of (disp || [])) {
+              const b = d.workArea || d.bounds;
+              if (b.left + b.width > maxRight) { maxRight = b.left + b.width; target = b; }
+            }
+          }
+          if (!target) { uiLog('WARN', '贴边跳过：无可用显示器信息'); return; }
+
+          const targetRight = target.left + target.width;       // 该屏 workArea 右沿（全局坐标）
+          const gap = targetRight - (curX + outerW);
+          uiLog('INFO', '贴边检测#' + round + ' => 屏右沿=' + targetRight + ' 窗口右=' + (curX + outerW) + ' gap=' + gap.toFixed(1) + 'px (curX=' + curX + ' outerW=' + outerW + ')');
+
+          if (Math.abs(gap) > 3) {
+            const newLeft = Math.round(curX + gap);
+            chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
+            uiLog('INFO', '贴边校正#' + round + ' => 左=' + newLeft + ' (' + (gap > 0 ? '右移+' : '左移') + Math.round(gap) + 'px)');
+            if (round < 3) { setTimeout(function() { snapToRight(round + 1); }, 150); }
+          } else {
+            uiLog('INFO', '贴边OK#' + round + ' => gap=' + gap.toFixed(1) + 'px（无需调整）');
+          }
+        } catch (e) {
+          uiLog('ERROR', '贴边校正异常：' + e.message);
+        }
+      });
+      return;
+    }
+
+    // 兜底（无 system.display 权限时）：用 window.screen（单屏可用）
     const screenW = window.screen.width;
     const curRight = window.screenX + window.outerWidth;
     const gap = screenW - curRight;
-
     uiLog('INFO', '贴边检测#' + round + ' => 屏幕宽=' + screenW + ' 窗口右=' + curRight + ' gap=' + gap.toFixed(1) + 'px (screenX=' + window.screenX + ' outerW=' + window.outerWidth + ')');
-
-    if (gap > 3) {
+    if (Math.abs(gap) > 3) {
       const newLeft = Math.round(window.screenX + gap);
       chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
-      uiLog('INFO', '贴边校正#' + round + ' => 左=' + newLeft + ' (右移+' + Math.round(gap) + 'px)');
-      // 闭环验证：150ms 后再测，还有间隙就继续推
-      if (round < 3) { setTimeout(function() { snapToRight(round + 1); }, 150); }
-    } else if (gap < -5) {
-      const newLeft = Math.round(window.screenX + gap);
-      chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
-      uiLog('INFO', '贴边回正#' + round + ' => 左=' + newLeft + ' (左移' + Math.round(gap) + 'px)');
+      uiLog('INFO', '贴边校正#' + round + ' => 左=' + newLeft);
       if (round < 3) { setTimeout(function() { snapToRight(round + 1); }, 150); }
     } else {
-      uiLog('INFO', '贴边OK#' + round + ' => gap=' + gap.toFixed(1) + 'px（无需调整）');
+      uiLog('INFO', '贴边OK#' + round + ' => gap=' + gap.toFixed(1) + 'px');
     }
   } catch (e) {
     uiLog('ERROR', '贴边校正异常：' + e.message);

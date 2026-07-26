@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>雪哨卡片预览（v1.4.10）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --win-bg:#FFFFFF; --win-border:#E5E5E5; --hd-border:#EDEDED;
+    --title:#1D2129; --subtitle:#86909C;
+    --logo-color:#F53F3F;
+    --btn-p-color:#1E6FFF; --btn-p-border:#1E6FFF;
+    --btn-g-color:#86909C; --btn-g-border:#D9D9D9;
+    --card-bg:#F3F4F6; --card-border:#E6E8EC;
+    --name:#1D2129; --summary:#4E5969;
+    --badge:#F53F3F;
+    --footer:#86909C; --footer-border:#F2F2F2;
+    --divider:#F0F0F0;
+    --avatar-size:36px;
+  }
+  body.theme-dark {
+    --win-bg:#1E1E22; --win-border:#2E2E34; --hd-border:#2E2E34;
+    --title:#E8E8EA; --subtitle:#8A8A92;
+    --logo-color:#FF6B6B;
+    --btn-p-color:#7AA2FF; --btn-p-border:#3A3A44;
+    --btn-g-color:#8A8A92; --btn-g-border:#444450;
+    --card-bg:#2A2A30; --card-border:#3A3A42;
+    --name:#E8E8EA; --summary:#8A8A92;
+    --badge:#F53F3F;
+    --footer:#6E6E76; --footer-border:#2E2E34;
+    --divider:#2A2A30;
+  }
+  body {
+    width: 440px; margin: 20px auto;
+    font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--win-bg); color: var(--title);
+    border: 1px solid var(--win-border); border-radius: 12px; overflow: hidden;
+  }
+  .hd {
+    padding: 10px 14px 10px 25px; font-size: 13px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 0.5px solid var(--hd-border); flex-shrink: 0;
+  }
+  .hd .total { font-size: 12px; font-weight: 500; color: var(--subtitle); white-space: nowrap; flex-shrink: 0; }
+  .hd button {
+    background: transparent; border: 0.5px solid var(--btn-p-border); color: var(--btn-p-color);
+    border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 11px; font-weight: 500;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .hd button.btn-g { border-color: var(--btn-g-border); color: var(--btn-g-color); padding: 3px 12px; }
+  .hd-spacer { flex: 1 1 auto; }
+  .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 0; margin-left: 2px; }
+  .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 10px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; }
+  .hd .theme-toggle .theme-btn.active { background: var(--btn-p-color); color: #fff; }
+  .list { padding: 14px; }
+  .row {
+    display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  }
+  body:not(.layout-inbox) .row {
+    background: var(--card-bg); border: 0.5px solid var(--card-border);
+    border-radius: 10px; padding: 11px; margin-bottom: 10px; overflow: hidden;
+  }
+  body:not(.layout-inbox) .row:hover { border-color: #D6E4FF; }
+  .avatar {
+    width: var(--avatar-size); height: var(--avatar-size); border-radius: 9px;
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; flex-shrink: 0;
+  }
+  .body { flex: 1; min-width: 0; }
+  .row1 { display: flex; align-items: center; gap: 8px; }
+  .name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--name); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 6px;
+    background: var(--badge); color: #fff; border-radius: 10px;
+    font-size: 11px; font-weight: 500; line-height: 18px; text-align: center;
+  }
+  .summary {
+    font-size: 12px; font-weight: 400; color: var(--summary); line-height: 1.5; margin-top: 4px;
+    word-break: break-word; overflow-wrap: break-word;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .ft {
+    font-size: 11px; font-weight: 400; color: var(--footer); text-align: left; padding: 10px 14px 10px 25px;
+    border-top: 0.5px solid var(--footer-border);
+  }
+  /* 折叠行：与底部说明同左对齐线（25px = 列表14px + 自身11px） */
+  .fold {
+    font-size: 11px; font-weight: 500; color: var(--btn-p-color);
+    padding: 10px 0 10px 11px; cursor: pointer; user-select: none; margin-top: 2px;
+  }
+  .fold:hover { opacity: .7; }
+  .toolbar { text-align: center; margin: 10px auto; }
+  .toolbar button { padding: 6px 16px; border-radius: 14px; border: 0.5px solid #1E6FFF; color: #1E6FFF; background: #fff; cursor: pointer; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="hd">
+    <span class="total" id="total">8 人 · 23 条未读</span>
+    <span class="hd-spacer"></span>
+    <button id="markAll">已读全部</button>
+    <button class="btn-g">关闭</button>
+    <span class="theme-toggle">
+      <button class="theme-btn" onclick="setPrevTheme('light')">明亮</button>
+      <button class="theme-btn" onclick="setPrevTheme('dark')">黑暗</button>
+    </span>
+  </div>
+  <div class="list" id="list"></div>
+  <div class="ft">点击卡片打开并标记已读 · 3分钟未操作自动关闭</div>
+  <div class="toolbar"><button onclick="toggleFold()">展开/收起折叠行</button></div>
+  <script>
+    var ALL = [
+      { name: '谢尔盖观察', color: '#86B4C9', summary: '今天半导体板块异动，设备国产化逻辑再强化，关注北方华创、中微公司订单兑现节奏。', badge: 0 },
+      { name: '康波暗线', color: '#A8B5A0', summary: '复盘这轮AI行情：海外算力资本开支超预期只是表面，真正的变量是推理侧需求爆发带来的存力缺口，HBM产能爬坡慢于预期，叠加先进封装CoWoS瓶颈，整个链条的定价权正在从设计向制造封测转移——这条线下半年还会反复交易，建议重点跟踪封测与设备双击。', badge: 3 },
+      { name: '红角资本', color: '#D4A5A5', summary: '短线注意节奏，沪指3400上方套牢盘密集，量能若不能持续放大，冲高回落概率偏大，仓位重的可以适当做减法。', badge: 0 },
+      { name: '阿克琉斯', color: '#A5ADC4', summary: '港股回调给长线资金机会，互联网平台分红回购常态化，现金流质量比增速更值得定价。', badge: 0 },
+      { name: '北境观测', color: '#C4B5AA', summary: '煤炭高股息逻辑没变，但估值已不便宜，股息率跌破5%就要重新审视性价比。', badge: 0 },
+      { name: '潮汐基金', color: '#B8ADA0', summary: '主动权益基金发行回暖，通常是市场情绪后验指标，谨慎追高。', badge: 0 },
+      { name: '玻璃海岸', color: '#BCA5C4', summary: '消费复苏斜率平缓，可选优于必选，关注出海占比高的家电与轻工。', badge: 0 },
+      { name: '南山笔记', color: '#C9B8A8', summary: '债市收益率低位震荡，理财净值波动加大，固收+需降低收益预期。', badge: 0 }
+    ];
+    var MAX_VISIBLE = 3;
+    var foldExpanded = false;
+
+    function render() {
+      var list = document.getElementById('list');
+      list.innerHTML = '';
+      var shown = foldExpanded ? ALL : ALL.slice(0, MAX_VISIBLE);
+      var rest = foldExpanded ? [] : ALL.slice(MAX_VISIBLE);
+      shown.forEach(function (g) {
+        var row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML =
+          '<div class="avatar" style="background:' + g.color + '">' + g.name[0] + '</div>' +
+          '<div class="body">' +
+          '<div class="row1"><span class="name">' + g.name + '</span>' +
+          (g.badge ? '<span class="badge">' + g.badge + '</span>' : '') + '</div>' +
+          '<div class="summary">' + g.summary + '</div></div>';
+        list.appendChild(row);
+      });
+      if (rest.length > 0) {
+        var fold = document.createElement('div');
+        fold.className = 'fold';
+        fold.textContent = '▼ 还有 ' + rest.length + '人 · ' + rest.length + '条未读（展开）';
+        fold.onclick = function () { foldExpanded = true; render(); };
+        list.appendChild(fold);
+      } else if (foldExpanded && ALL.length > MAX_VISIBLE) {
+        var fold2 = document.createElement('div');
+        fold2.className = 'fold';
+        fold2.textContent = '▲ 收起折叠内容';
+        fold2.onclick = function () { foldExpanded = false; render(); };
+        list.appendChild(fold2);
+      }
+    }
+    function setPrevTheme(t) {
+      if (t === 'dark') document.body.classList.add('theme-dark');
+      else document.body.classList.remove('theme-dark');
+      var btns = document.querySelectorAll('.theme-toggle .theme-btn');
+      btns[0].classList.toggle('active', t === 'light');
+      btns[1].classList.toggle('active', t === 'dark');
+    }
+    function toggleFold() { foldExpanded = !foldExpanded; render(); }
+
+    // 默认明亮主题高亮
+    document.querySelectorAll('.theme-toggle .theme-btn')[0].classList.add('active');
+    render();
+  </script>
+</body>
+</html>
