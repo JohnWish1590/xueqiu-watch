@@ -5,88 +5,114 @@
   <title>雪哨</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --win-bg:#FFFFFF; --win-border:#E5E5E5;
+      --hd-border:#EDEDED;
+      --title:#1D2129; --subtitle:#86909C;
+      --logo-color:#F53F3F;
+      --btn-p-color:#1E6FFF; --btn-p-border:#1E6FFF;
+      --btn-g-color:#86909C; --btn-g-border:#D9D9D9;
+      --card-bg:#FFFFFF; --card-border:#EFEFEF;
+      --name:#1D2129; --summary:#4E5969;
+      --badge:#F53F3F;
+      --footer:#86909C; --footer-border:#F2F2F2;
+      --divider:#F0F0F0;
+      --avatar-size:36px;
+    }
+    body.theme-dark {
+      --win-bg:#1E1E22; --win-border:#2E2E34;
+      --hd-border:#2E2E34;
+      --title:#E8E8EA; --subtitle:#8A8A92;
+      --logo-color:#FF6B6B;
+      --btn-p-color:#7AA2FF; --btn-p-border:#3A3A44;
+      --btn-g-color:#8A8A92; --btn-g-border:#444450;
+      --card-bg:#26262C; --card-border:#33333B;
+      --name:#E8E8EA; --summary:#8A8A92;
+      --badge:#F53F3F;
+      --footer:#6E6E76; --footer-border:#2E2E34;
+      --divider:#2A2A30;
+    }
+    body.layout-inbox { --avatar-size:32px; }
+
     html, body {
-      width: 420px;
+      width: 440px;
       height: 100vh;
       overflow: hidden;
       font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
-      background: #F8F9FA;
+      background: var(--win-bg);
+      color: var(--title);
       display: flex;
       flex-direction: column;
     }
     body { animation: fadeIn .3s ease-out; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-4px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
-    /* ── 顶部标题栏：浅色毛玻璃风格 ── */
+    /* ── 顶部标题栏 ── */
     .hd {
-      background: rgba(255,255,255,.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      color: #1D2129;
-      padding: 11px 16px;
+      background: var(--win-bg);
+      color: var(--title);
+      padding: 11px 14px;
       font-size: 13px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
-      border-bottom: 0.5px solid #EDEEF0;
+      border-bottom: 0.5px solid var(--hd-border);
     }
-    .hd-left { display: flex; align-items: center; gap: 7px; }
-    .hd-icon { font-size: 15px; }
-    .hd-title { font-weight: 600; font-size: 14px; color: #1D2129; }
-    .hd .total { font-size: 12px; color: #86909C; margin-left: 4px; }
-    .hd-right { display: flex; gap: 8px; align-items: center; }
+    .hd-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .hd-logo { width: 17px; height: 17px; flex-shrink: 0; fill: var(--logo-color); }
+    .hd-title { font-weight: 500; font-size: 14px; color: var(--title); }
+    .hd .total { font-size: 11px; font-weight: 400; color: var(--subtitle); margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hd-right { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
     .hd button {
       background: transparent;
-      border: 1px solid #C9CDD4;
-      color: #4E5969;
-      border-radius: 6px;
-      padding: 4px 12px;
+      border: 0.5px solid var(--btn-p-border);
+      color: var(--btn-p-color);
+      border-radius: 14px;
+      padding: 3px 10px;
       cursor: pointer;
-      font-size: 12px;
-      transition: all .15s;
+      font-size: 11px;
+      font-weight: 500;
+      transition: opacity .15s;
+      white-space: nowrap;
     }
-    .hd button:hover { border-color: #1E6FFF; color: #1E6FFF; background: rgba(30,111,255,.04); }
+    .hd button.btn-g { border-color: var(--btn-g-border); color: var(--btn-g-color); padding: 3px 12px; }
+    .hd button:hover { opacity: .7; }
 
     /* ── 消息列表 ── */
     .list {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 14px;
+      padding: 14px;
       background: transparent;
       scrollbar-width: thin;
-      scrollbar-color: rgba(0,0,0,.10) transparent;
+      scrollbar-color: rgba(128,128,128,.25) transparent;
     }
+    body.layout-inbox .list { padding: 4px 14px; }
     .list::-webkit-scrollbar { width: 4px; }
-    .list::-webkit-scrollbar-thumb { background: rgba(0,0,0,.10); border-radius: 2px; }
+    .list::-webkit-scrollbar-thumb { background: rgba(128,128,128,.25); border-radius: 2px; }
 
-    /* ── 卡片：微阴影 + 淡边框 + 圆角 ── */
-    .card {
-      background: #fff;
-      border: 1px solid #EFEFEF;
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      cursor: pointer;
-      transition: box-shadow .15s, transform .12s, border-color .15s, opacity .3s, max-height .3s, margin .3s, padding .3s;
-      position: relative;
+    /* ── 行（卡片 / 收件箱行 共用）── */
+    .row {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       align-items: flex-start;
-      max-height: 130px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,.04);
+      cursor: pointer;
+      transition: opacity .3s, transform .3s, max-height .3s, margin .3s, padding .3s, border-width .3s, background .15s;
     }
-    .card:hover {
-      box-shadow: 0 4px 16px rgba(0,0,0,.08);
-      transform: translateY(-1px);
-      border-color: #D6E4FF;
+    body:not(.layout-inbox) .row {
+      background: var(--card-bg);
+      border: 0.5px solid var(--card-border);
+      border-radius: 10px;
+      padding: 11px;
+      margin-bottom: 10px;
     }
-    /* 已读滑出 */
-    .card.read {
+    body:not(.layout-inbox) .row:hover { border-color: #D6E4FF; }
+    body.layout-inbox .row { padding: 11px 0; border-bottom: 0.5px solid var(--divider); }
+    body.layout-inbox .row:last-child { border-bottom: none; }
+    body.layout-inbox .row:hover { background: rgba(128,128,128,.05); }
+
+    .row.read {
       opacity: 0;
       transform: translateX(60px);
       max-height: 0;
@@ -97,57 +123,55 @@
       pointer-events: none;
     }
 
-    /* ── 头像：马卡龙色系（低饱和、柔和） ── */
+    /* ── 头像：圆角方块 + 马卡龙低饱和色 ── */
     .avatar {
-      width: 42px; height: 42px; border-radius: 50%;
+      width: var(--avatar-size); height: var(--avatar-size);
+      border-radius: 9px;
       color: #fff; display: flex; align-items: center; justify-content: center;
-      font-size: 17px; font-weight: 500; flex-shrink: 0; position: relative;
+      font-size: 15px; font-weight: 500; flex-shrink: 0;
     }
-    /* 角标：红色小圆点/数字，压在右上角 */
-    .badge {
-      position: absolute; top: -5px; right: -5px;
-      min-width: 18px; height: 18px; padding: 0 5px;
-      background: #F53F3F; color: #fff; border-radius: 9px;
-      font-size: 11px; font-weight: 600; line-height: 18px; text-align: center;
-      border: 2px solid #F8F9FA; box-shadow: 0 1px 4px rgba(245,63,63,.25);
-    }
+    body.layout-inbox .avatar { border-radius: 8px; }
 
-    /* ── 卡片内容区 ── */
+    /* ── 内容区 ── */
     .body { flex: 1; min-width: 0; }
-    .row1 { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
-    .name { font-size: 14px; font-weight: 600; color: #1D2129; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .time { font-size: 11px; color: #86909C; flex-shrink: 0; margin-left: auto; }
-    .txt { font-size: 12px; color: #4E5969; line-height: 1.55; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
-    .readhint { font-size: 11px; color: #1E6FFF; margin-top: 5px; opacity: 0; transition: opacity .15s; }
-    .card:hover .readhint { opacity: 1; }
+    .row1 { display: flex; align-items: center; gap: 8px; }
+    .name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--name); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge {
+      flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 6px;
+      background: var(--badge); color: #fff; border-radius: 10px;
+      font-size: 11px; font-weight: 500; line-height: 18px; text-align: center;
+    }
+    .summary { font-size: 12px; font-weight: 400; color: var(--summary); line-height: 1.5; margin-top: 4px; }
+    body:not(.layout-inbox) .summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    body.layout-inbox .summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* ── 空态 ── */
     .empty {
-      color: #86909C; font-size: 13px; text-align: center; padding: 40px 16px;
-      flex: 1; display: flex; align-items: center; justify-content: center;
+      color: var(--subtitle); font-size: 13px; text-align: center; padding: 40px 16px;
+      flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
     }
 
-    /* ── 底部提示栏：缩小、居中、淡色 ── */
+    /* ── 底部提示栏 ── */
     .ft {
-      font-size: 11px; color: #86909C; text-align: center; padding: 8px 0 10px;
-      flex-shrink: 0; background: transparent; line-height: 1.5;
+      font-size: 11px; font-weight: 400; color: var(--footer); text-align: center; padding: 8px 10px;
+      flex-shrink: 0; background: transparent; line-height: 1.5; border-top: 0.5px solid var(--footer-border);
     }
   </style>
 </head>
 <body>
   <div class="hd">
     <div class="hd-left">
-      <span class="hd-icon">❄</span>
+      <svg class="hd-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L13.09 8.26L19 6.64L15.27 11.73L20.18 16.36L14.25 15.04L12.68 21L10.75 15.1L4.82 16.36L9.73 11.73L6 6.64L11.91 8.26Z"/></svg>
       <span class="hd-title">雪哨</span>
       <span class="total" id="total"></span>
     </div>
     <div class="hd-right">
-      <button id="markAll">一键已读</button>
-      <button id="close">关闭</button>
+      <button id="markAll">已读全部</button>
+      <button id="close" class="btn-g">关闭</button>
     </div>
   </div>
   <div class="list" id="list"></div>
-  <div class="ft">点击卡片打开并标记已读 · 全部读完自动关闭 · 3分钟未操作自动关闭</div>
+  <div class="ft">点击卡片打开并标记已读 · 3分钟未操作自动关闭</div>
   <script src="alert.js"></script>
 </body>
 </html>
