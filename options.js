@@ -146,6 +146,12 @@ async function load() {
   const ck = await new Promise(r => chrome.storage.local.get('xqCookie', r));
   if (ck.xqCookie) $('cookie').value = ck.xqCookie;
 
+  // 外观：弹窗布局 + 主题
+  const ap = await new Promise(r => chrome.storage.local.get('appearance', r));
+  const a = ap.appearance || { layout: 'card', theme: 'light' };
+  $('layout').value = a.layout || 'card';
+  $('theme').value = a.theme || 'light';
+
   const su = await new Promise(r => chrome.storage.local.get(['selectedUsers', 'recentGroupUsers'], r));
   if (su.recentGroupUsers && su.recentGroupUsers.length) {
     groupUsers = su.recentGroupUsers;
@@ -178,17 +184,26 @@ async function save() {
     touser: $('wecom-touser').value.trim(),
   };
 
+  const appearance = { layout: $('layout').value, theme: $('theme').value };
   await new Promise(r => chrome.storage.local.set({
     options: { intervalMin, soundOn, manualUsers, wecom },
     selectedUsers: checked,
     recentGroupUsers: groupUsers,
     xqCookie: cookie,
+    appearance,
   }, r));
 
   await bg({ type: 'saveOptions', options: { intervalMin, soundOn, manualUsers, wecom } });
   if (soundOn) await bg({ type: 'setSound', on: true });
 
   showStatus('✅ 已保存', true);
+}
+
+// ---- 外观即时保存（切换下拉即生效到存储，下次弹窗应用）----
+async function saveAppearanceLive() {
+  const appearance = { layout: $('layout').value, theme: $('theme').value };
+  await chrome.storage.local.set({ appearance });
+  showStatus('✅ 外观已更新（下次弹窗生效）', true);
 }
 
 // ---- 工具 ----
@@ -376,6 +391,8 @@ function bindEvents() {
   $('btn-group').addEventListener('click', loadGroup);
   $('sel-all').addEventListener('change', (e) => toggleAll(e.target.checked));
   $('save').addEventListener('click', save);
+  $('layout').addEventListener('change', saveAppearanceLive);
+  $('theme').addEventListener('change', saveAppearanceLive);
   $('btn-diag').addEventListener('click', runDiagnose);
   $('btn-copy-diag').addEventListener('click', copyDiag);
   $('btn-test').addEventListener('click', testNotify);
