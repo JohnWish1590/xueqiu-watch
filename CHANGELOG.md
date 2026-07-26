@@ -5,6 +5,25 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.4.2] - 2026-07-26
+
+> ⚠️ **贴边策略重构 + 按钮布局修正 + 去星号**。已装用户请开发者模式重新加载覆盖升级。
+
+### Fixed
+- **贴边策略从根重构**：v1.4.1 及之前所有版本，background.js 一直用 `system.display` 的坐标（无论主屏/浏览器所在屏）算 left，在用户环境下**始终不贴边**（~78px 空隙）。本次彻底换策略：**background.js 不再算精确 left**（只给一个保守的「偏右余量」初始落点），**完全由 alert.js 内部的 `snapToRight()` 用 `window.screen.availLeft + availWidth` 做精确定位**——弹窗内部的 screen API 与 Chrome 渲染引擎同源坐标，不受任何外部坐标系偏差影响。分 4 个时间点（60ms/250ms/600ms/1200ms）反复校正，覆盖 DWM 稳定、字体渲染等时机。
+- **按钮溢出窗口**：顶栏「已读全部」+「关闭」两个按钮从右侧移到**左侧紧跟人数后面**（`[1人·4条未读] [已读全部] [关闭]`），不再被挤出右边界。
+
+### Changed
+- **去掉未读数前的 ★ 星号**：未读数从 `★ N 人 · M 条` 改为 `N 人 · M 条`（更简洁）。
+- **header 布局改为全靠左**：去掉 `justify-content: space-between` 和 `.hd-right` 容器，所有控件（人数+双按钮）在一行内左排列，右侧留空。
+- **贴边日志增强**：snapToRight 每次调用都打印完整坐标（availLeft/availWidth/screenX/outerWidth/gap），方便排查定位问题。
+- **background.js 精简**：删除 `getScreenForRect()` / `getPrimaryDisplayBounds()` / post-create 校正逻辑（全部由 alert.js 接管），减少出错面。
+
+### Known Issues
+- **空白小窗口频繁弹出**：用户反馈改代码后出现额外的空白 popup 窗口。疑似 service worker 重启后 `alertWinIds` 被清空 → `findExistingAlertWin()` 找不到已有弹窗 → 又建了一个新的。本次已加强日志（创建时打 id），下次复现时请把日志里「弹窗已创建 id=」和「贴边检测」条目发我，用于确认是否为重复创建。
+
+---
+
 ## [1.4.1] - 2026-07-26
 
 > ⚠️ **贴边从根修复 + 弹窗高度动态自适应 + 头部/卡片视觉修正**。已装用户请开发者模式重新加载覆盖升级，无需重新配置。
@@ -120,6 +139,7 @@
 ---
 
 <!-- 链接定义（便于跨文件跳转，无实际跳转需求可忽略） -->
+[1.4.2]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.2
 [1.4.1]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.1
 [1.4.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.0
 [1.3.3]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.3
