@@ -1,6 +1,6 @@
 # 雪哨（xueqiu-watch）— 雪球特别关注新帖提醒
 
-[![version](https://img.shields.io/badge/version-1.4.0-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.0)
+[![version](https://img.shields.io/badge/version-1.4.1-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.1)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-brightgreen)](https://developer.chrome.com/docs/extensions/mv3/)
 [![license](https://img.shields.io/badge/license-自定义版权-important)](LICENSE)
 [![updated](https://img.shields.io/badge/最后更新-2026--07--26-informational)](https://github.com/JohnWish1590/xueqiu-watch/commits/main)
@@ -22,7 +22,7 @@
 
 - **① 系统通知**：新帖时 Windows 右下角 toast，`priority:2` + `requireInteraction:true`，即便 Chrome 最小化也会在桌面出现、不自动消失。
 - **② 声音提示**（可选）：用 Offscreen Document + Web Audio 播「滴-滴」声，Chrome 最小化也响；被浏览器自动播放策略拦住时自动改系统朗读。
-- **③ 右侧磁吸常驻弹窗**：从屏幕右侧滑入，按博主合并未读卡片、点击打开原帖+标已读、「已读全部」一键清空；全读完自动关闭，3 分钟未读自动重弹。**外观可在设置页切换**：两种布局（紧凑精准·卡片式 / 收件箱式·分隔线行）× 两种主题（明亮 / 黑暗）。
+- **③ 右侧磁吸常驻弹窗**：从屏幕右侧滑入，按博主合并未读卡片、点击打开原帖+标已读、「已读全部」一键清空；全读完自动关闭，3 分钟未读自动重弹。**外观可在设置页切换**：两种布局（紧凑精准·卡片式 / 收件箱式·分隔线行）× 两种主题（明亮 / 黑暗）。**窗口高度按内容自适应**（1 人少量帖 → 紧凑；多人多帖 → 自动增高，夹在 240~540px 之间），并**真正紧贴屏幕右边缘**（按浏览器所在屏幕动态计算，多屏 / DPI 缩放下无空隙）。
 - **④ 企业微信推送到微信**（可选）：同时把新帖发到你的个人微信——电脑前桌面微信跳出、离开电脑手机微信收到。
 - **零配置登录检测**：借已登录的雪球标签页注入 fetch 自动取登录态，无需手动复制 Cookie。
 - **一键诊断 + 运行日志**：逐环节排查登录态获取路径，出错时把日志发作者即可定位。
@@ -51,7 +51,7 @@
 
 ### 方式一：开发者模式加载已解压（当前唯一分发方式，推荐）
 
-1. 下载本仓库 Release 中的 `xueqiu-watch-v1.3.0.zip`，或 `git clone` 后取仓库目录，解压。
+1. 下载本仓库 Release 中的 `xueqiu-watch-v1.4.1.zip`，或 `git clone` 后取仓库目录，解压。
 2. 浏览器地址栏输入 `chrome://extensions`（Edge 为 `edge://extensions`）。
 3. 右上角打开 **开发者模式（Developer mode）**。
 4. 点 **加载已解压的扩展程序（Load unpacked）**，选择解压后的目录。
