@@ -77,6 +77,10 @@ function groupUnread(items) {
   return { merged, unreadTotal: unread.length };
 }
 
+// 折叠：最多显示 3 张卡片，其余收进「还有 N人·M条未读」折叠行
+const MAX_VISIBLE = 3;
+let foldExpanded = false;
+
 function render() {
   chrome.storage.local.get(['recent'], ({ recent }) => {
     const list = document.getElementById('list');
@@ -95,7 +99,11 @@ function render() {
 
     const isInbox = document.body.classList.contains('layout-inbox');
 
-    merged.forEach(g => {
+    // 折叠态：仅显示前 3 张；展开态：全部显示
+    const shown = foldExpanded ? merged : merged.slice(0, MAX_VISIBLE);
+    const rest = foldExpanded ? [] : merged.slice(MAX_VISIBLE);
+
+    shown.forEach(g => {
       const latest = g.posts[0];
       const row = document.createElement('div');
       row.className = 'row';
@@ -111,6 +119,24 @@ function render() {
       row.addEventListener('click', () => onRowClick(row, g, latest));
       list.appendChild(row);
     });
+
+    if (rest.length > 0) {
+      // 折叠行：剩余人数 + 剩余未读条数
+      const restUnread = rest.reduce((s, g) => s + g.posts.length, 0);
+      const fold = document.createElement('div');
+      fold.className = 'fold';
+      fold.textContent = '▼ 还有 ' + rest.length + '人 · ' + restUnread + '条未读（展开）';
+      fold.addEventListener('click', () => { foldExpanded = true; render(); });
+      list.appendChild(fold);
+    } else if (foldExpanded && merged.length > MAX_VISIBLE) {
+      // 展开后显示收起行
+      const fold = document.createElement('div');
+      fold.className = 'fold';
+      fold.textContent = '▲ 收起折叠内容';
+      fold.addEventListener('click', () => { foldExpanded = false; render(); });
+      list.appendChild(fold);
+    }
+
     resizeToContent();
   });
 }
