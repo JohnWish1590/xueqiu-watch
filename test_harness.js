@@ -231,15 +231,16 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
   assert(captured.contentScriptCall !== undefined, '使用 content script 路径');
   assert(captured.scriptExec === undefined, '未使用 scripting（已禁用）');
 
-  // 6b：scripting 关 + content script 关 + cookie 有 → cookie 兜底
+  // 6b：scripting 关 + content script 关（无可用取数路径）→ 即使有 cookie 也无法获取
+  // （方案A：SW 跨域 fetch 无法携带雪球 Cookie，本扩展要求保持雪球标签页，由标签页内注入取数）
   scriptingEnabled = false; contentScriptEnabled = false;
   captured.scriptExec = undefined; captured.contentScriptCall = undefined;
   cookieJar = [ { name: 'xq_a_token', value: 'FALLBACK_TOKEN', httpOnly: true } ];
   delete store.xqCookie;
   let r6b = await new Promise(r =>
     captured.onMessage({ type: 'apiGet', url: 'https://xueqiu.com/friendships/groups.json' }, {}, r));
-  assert(r6b.ok === true, '两条自动路径都关 + cookie 可用 → 成功');
-  assert(Array.isArray(r6b.data) && r6b.data.length > 0, 'cookie 兜底仍返回分组数组');
+  assert(r6b.ok === false, '两条自动路径都关 → 即使有 cookie 也无法获取（需保持雪球标签页）');
+  assert(/无法获取登录态/.test(r6b.err || ''), '错误提示引导保持雪球标签页');
   scriptingEnabled = true; contentScriptEnabled = true; cookieJar = [ { name: 'xq_a_token', value: 'TOKEN_ABC', httpOnly: true }, { name: 'u', value: '123' } ];
 
   console.log('=== 场景7：全不可用 → 返回明确错误 ===');

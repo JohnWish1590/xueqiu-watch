@@ -5,6 +5,38 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.5.0] - 2026-07-26
+
+> 🔧 **依据第三方代码评审（18 项意见）做一次集中重构**。逐条字节级核验后，真问题全部修复，架构项全部落地，评审中的乱码/CJK 误报经字节验证未改。已装用户请开发者模式重新加载覆盖升级。
+
+### 修复（真 bug / 风险）
+- **#1 轮询静默卡死**：`sendMessageWithTimeout` 原在 `setTimeout` 回调里 `throw`，错误不进 Promise 链 → content script 挂起时永不 reject、轮询永久卡住。改为 `Promise.race([chrome.tabs.sendMessage(tabId, msg), timeoutP])`，超时真正 reject。
+- **#3 空轮询 8 秒**：`waitTabComplete` 标签页中途关闭时 `catch` 空转 → 仍每 300ms 轮询到 8s 超时。改为 `catch` 内 `clearInterval + resolve(false)` 立即判定失败。
+- **#4 删除 Cookie 死路径**：`getXueqiuCookies` / `fetchWithCookie` 在「无雪球标签页」场景永远失败（跨域 fetch 手动设 `Cookie` 属 forbidden header 被静默丢弃 + SW 自身 credentials 无登录态）。采用方案 A：删除两个死函数与 `fetchJSON` 的第③兜底分支；取数失败时提示「请保持至少一个雪球标签页打开」。测试场景 6b 同步为诚实行为（`ok=false` + 错误含「无法获取登录态」）。
+- **#5 通知跳转 url 竞态**：`notifyNewPosts` 的 `urlMap` 改用**模块级内存缓存** + 异步 flush 到 storage，避免「读-改-写」竞态；`openPost` 优先读内存，命中即直接打开，未命中再回退 storage。
+- **#6 卡片顺序不按时间**：`checkOnce` 合并所有用户新帖后缺全局排序 → 弹窗卡片顺序混乱。末尾新增 `newAll.sort((a,b)=>Number(b.id)-Number(a.id))`，全局按时间线倒序。
+- **#18 emoji 被劈半**：`truncate` 原用 `s.length`/字符串下标切分，代理对（emoji 等）会从中断开成半个字符。改用 `Array.from(s)` 按码点切分，保证边界完整。
+
+### 架构优化
+- **#7 消息路由 dispatch map**：`onMessage` 约 140 行 `if (msg.type===...)` 长链改为 `msgHandlers` 对象 + 统一 `Promise.resolve().then(handler).then(sendResponse).catch(...)` 包装，新增消息类型只加一行；保留 `return true` 异步契约。
+- **#8 since_id 防御式增量**：`getUserTimeline(userId, page, since)` 在 `since>0` 时附加 `&since_id=`，减少流量与 429 概率；同时保留 `checkOnce` 客户端 id 过滤作安全网（雪球接口万一不认 since_id 仍正确）。
+- **#9 并发抓取池**：新增 `mapConcurrent(items, limit, fn)`（默认并发 3）替代 `checkOnce` 内串行 `for...of`，多用户检测延迟显著下降。
+- **#10 统一响应解析**：抽出 `parseXQResponse(r, url)` 处理 `{status, text}`，`fetchJSON` 的 scripting 注入与 content script 两条路径共用，消除重复解析与不一致。
+- **#11 离屏文档冷启动检查**：`ensureOffscreen` 在创建前用 `chrome.offscreen.hasDocument?.()` 询问文档是否真实存在（SW 重启后内存 `offscreenReady` 归零但文档可能仍在），避免重复 `createDocument` 触发 exists 错误分支。
+- **#12 贴边时间轴循环化**：`alert.js` 初始化里 5 个散落的魔法数字 `setTimeout(...60/250/600/1200/2000)` 合并为常量数组 `SNAP_TIMELINE` + `forEach` 循环，行为不变、便于调参、消除复制粘贴。
+- **#14 stripHtml 增强**：新增移除 HTML 注释 / `<style>` / `<script>` 整段；块级标签（`</p> </div> </li> </h1-6> </tr>`）转换行；实体解码补全 `&nbsp; &amp; &#数字; &lt; &gt; &quot; &apos; &hellip; &mdash; &ndash;` 并归一 `&nbsp;`/`&#160;` 为普通空格；`&amp;` 先于其他实体解码以正确处理双重转义。原有测试 `'<p>aa</p><br>b<b>x</b>' === 'aa\nbx'` 仍通过。
+- **#15 启动引导 ready Promise**：原 urlMap 恢复 IIFE 改为模块级 `ready` Promise；`onInstalled` / `onStartup` / `onAlarm` 三个监听器 `await ready` 后再工作，杜绝 SW 冷启动竞态。
+
+### 文档 / 代码风格
+- **#13 README 版本徽章同步**：`1.4.3 → 1.5.0`（链接同步至 v1.5.0）；manifest `description` 经字节扫描确认干净无乱码（评审该条为误报）。
+
+### 评审误报（经字节级验证，未改原写法）
+- **#17 源码乱码 = 误报**：Python 字节级扫描全部 `.js/.html/.json`（含 popup/options/content/background），均合法 UTF-8、无 BOM、零乱码串（闆/鎶撳彇/鏂笘/銆? 均无）。大神看到的乱码是其阅读工具对中文渲染/拷贝残影。
+- **#2 "异常被空 catch 吞" = 机制误报**：`getXueqiuCookies` 本就有 `if (chrome.cookies && chrome.cookies.getAll)` 守卫、不抛异常；其底层结论（无标签页场景不工作）与 #4 一致，已随 #4 一并处理。
+- **#16 物理模块拆分 = 采用替代方案**：评审建议拆成多个 ES module。鉴于 `test_harness.js` 用 `vm.runInContext` 加载**单文件** `background.js` 并依赖全局函数暴露，物理拆分会破坏整套测试网。决策为**单文件内模块化**（dispatch map + 清晰分段注释），等价获得可读性收益且不重写测试桩。
+
+> 🧪 回归：全部 53 条单元测试断言通过（0 FAIL）。
+
 ## [1.4.10] - 2026-07-26
 
 > 🐛 **多显示器弹窗创建失败 + 弹窗宽度/布局反复调试最终定稿**。已装用户请开发者模式重新加载覆盖升级。

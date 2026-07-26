@@ -301,14 +301,16 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'alertRefresh') render();
 });
 
-// 初始化流程：应用外观 -> 渲染 -> 多次贴边+高度校正
+// 贴边校正时间轴：弹窗创建后布局/字体需若干帧才稳定，
+// 故在多个时间点重复测量并校正（snapToRight 内部还会做最多 3 轮闭环）。
+// 集中为常量数组，便于调参，不再散落魔法数字。
+const SNAP_TIMELINE = [60, 250, 600, 1200, 2000];
+
+// 初始化流程：应用外观 -> 渲染 -> 按时间轴循环贴边 + 高度校正
 (async () => {
   await applyAppearance();
   render();
-  // 分 5 个时间点调用，每个时间点的 snapToRight 内部还会做最多 3 轮闭环校正
-  setTimeout(function() { snapToRight(1); resizeToContent(); }, 60);
-  setTimeout(function() { snapToRight(1); resizeToContent(); }, 250);
-  setTimeout(function() { snapToRight(1); resizeToContent(); }, 600);
-  setTimeout(function() { snapToRight(1); resizeToContent(); }, 1200);
-  setTimeout(function() { snapToRight(1); resizeToContent(); }, 2000);
+  SNAP_TIMELINE.forEach((t) => {
+    setTimeout(() => { snapToRight(1); resizeToContent(); }, t);
+  });
 })();

@@ -111,23 +111,22 @@ async function clearLog() {
 //      直接 sendMessage 代发，比 ① 少一次注入开销，更快。标签页未刷新时
 //      会报 "Receiving end does not exist"，此时自动回退 ①，无影响。
 //
-//   ③ 显式 Cookie 注入 —— 用户手动粘贴 / chrome.cookies 读取的 Cookie，
-//      作为没有任何雪球标签页时的备用。
+//   ③（已废弃）显式 Cookie 注入：SW 跨域 fetch 手动设的 Cookie 头属 forbidden header
+//      会被浏览器静默丢弃，credentials 又只带 SW 自身 jar（无雪球 Cookie），故无效。
+//      本扩展要求保持至少一个雪球标签页打开，由 ①/② 在标签页内注入完成取数。
 // ═══════════════════════════════════════════════════════════════
 
 // tabs.sendMessage 没有原生 timeout 参数（options 只认 {frameId}），
 // 用 setTimeout 自己加一个超时，避免 content script 不响应时卡死。
+// tabs.sendMessage 在 MV3 返回 Promise，直接用 Promise.race 包一层超时。
+// ⚠️ 旧写法在 setTimeout 回调里 throw，那个 throw 发生在异步回调上下文，不在本函数
+// Promise 链上 → 外层 try/catch 接不住，content script 挂起时 Promise 永不 reject、轮询静默卡死。
 async function sendMessageWithTimeout(tabId, msg, ms = 6000) {
-  let settled = false;
-  const timer = setTimeout(() => {
-    if (!settled) { settled = true; throw new Error('content script 无响应（超时）'); }
-  }, ms);
-  try {
-    const r = await chrome.tabs.sendMessage(tabId, msg);
-    if (!settled) { settled = true; clearTimeout(timer); return r; }
-  } catch (e) {
-    if (!settled) { settled = true; clearTimeout(timer); throw e; }
-  }
+  const sendP = chrome.tabs.sendMessage(tabId, msg);
+  const timeoutP = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('content script 无响应（超时）')), ms)
+  );
+  return Promise.race([sendP, timeoutP]);
 }
 
 // ① Content Script 路径：通过消息让雪球页面内的 content.js 代发请求
@@ -147,52 +146,6 @@ async function apiViaContentScript(url) {
     log('content script 路径失败：', e.message);
     return null;
   }
-}
-
-// ② 显式 Cookie 注入路径
-async function getXueqiuCookies() {
-  try {
-    if (chrome.cookies && chrome.cookies.getAll) {
-      let cookies = await chrome.cookies.getAll({ url: 'https://xueqiu.com' });
-      if (!cookies || !cookies.length) {
-        cookies = await chrome.cookies.getAll({ domain: 'xueqiu.com' });
-      }
-      if (cookies && cookies.length) {
-        const map = {};
-        for (const c of cookies) map[c.name] = c.value;
-        return Object.keys(map).map(k => `${k}=${map[k]}`).join('; ');
-      }
-    }
-  } catch (e) {}
-  try {
-    const stored = await chrome.storage.local.get('xqCookie');
-    if (stored.xqCookie) return stored.xqCookie;
-  } catch (e) {}
-  return '';
-}
-
-async function fetchWithCookie(url, opts, cookieHeader) {
-  const headers = Object.assign({
-    'User-Agent': navigator.userAgent,
-    'Accept': 'application/json, text/plain, */*',
-    'Referer': 'https://xueqiu.com/',
-    'X-Requested-With': 'XMLHttpRequest',
-  }, opts.headers || {});
-  headers['Cookie'] = cookieHeader;
-  const res = await fetch(url, {
-    method: opts.method || 'GET',
-    headers,
-    credentials: 'include',
-  });
-  if (res.status === 429) throw new Error('触发限流 429，请稍后重试');
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  const data = safeParseJSON(text, url);
-  if (data && data.error_code) {
-    const desc = data.error_description || data.message || '';
-    throw new Error(`雪球返回错误码 ${data.error_code}${desc ? '：' + desc : ''}`);
-  }
-  return data;
 }
 
 // ③ scripting 注入借标签页（最后兜底）
@@ -233,7 +186,12 @@ function waitTabComplete(tabId) {
       try {
         const t = await chrome.tabs.get(tabId);
         if (t && t.status === 'complete') { clearInterval(timer); resolve(true); return; }
-      } catch (e) {}
+      } catch (e) {
+        // 标签页在此期间被关闭 → 直接判定失败，避免空轮询到 8 秒超时
+        clearInterval(timer);
+        resolve(false);
+        return;
+      }
       if (Date.now() - t0 > 8000) { clearInterval(timer); resolve(false); }
     }, 300);
   });
@@ -247,6 +205,20 @@ function safeParseJSON(text, url) {
   }
 }
 
+// 三条取数路径统一返回的 { status, text } 解析：429 / 非200 / error_code 统一在此处理，
+// 避免 ①/② 重复两份几乎一样的解析逻辑（历史上 ③ 也有一份）。
+function parseXQResponse(r, url) {
+  if (!r) return null;
+  if (r.status === 429) throw new Error('触发限流 429，请稍后重试');
+  if (r.status !== 200) throw new Error('HTTP ' + r.status);
+  const data = safeParseJSON(r.text, url);
+  if (data && data.error_code) {
+    const desc = data.error_description || data.message || '';
+    throw new Error(`雪球返回错误码 ${data.error_code}${desc ? '：' + desc : ''}`);
+  }
+  return data;
+}
+
 // ─── 统一入口：按优先级尝试各路径 ───
 async function fetchJSON(url, opts = {}) {
   // ① scripting 注入（主路径：随用随注入，无需刷新标签页，最稳）
@@ -255,15 +227,8 @@ async function fetchJSON(url, opts = {}) {
     try {
       const r = await apiViaTab(url, opts);
       if (r) {
-        if (r.status === 429) throw new Error('触发限流 429，请稍后重试');
-        if (r.status !== 200) throw new Error('HTTP ' + r.status);
-        const data = safeParseJSON(r.text, url);
-        if (data && data.error_code) {
-          const desc = data.error_description || data.message || '';
-          throw new Error(`雪球返回错误码 ${data.error_code}${desc ? '：' + desc : ''}`);
-        }
-        log('取数路径① 成功（scripting 注入）', url);
-        return data; // ✅ 成功！走的是雪球标签页内注入的 fetch
+        const data = parseXQResponse(r, url);
+        if (data) { log('取数路径① 成功（scripting 注入）', url); return data; }
       }
     } catch (e) {
       // 网络层错误（限流 / HTTP）→ 直接抛出，不回退
@@ -280,15 +245,8 @@ async function fetchJSON(url, opts = {}) {
     try {
       const r = await apiViaContentScript(url);
       if (r) {
-        if (r.status === 429) throw new Error('触发限流 429，请稍后重试');
-        if (r.status !== 200) throw new Error('HTTP ' + r.status);
-        const data = safeParseJSON(r.text, url);
-        if (data && data.error_code) {
-          const desc = data.error_description || data.message || '';
-          throw new Error(`雪球返回错误码 ${data.error_code}${desc ? '：' + desc : ''}`);
-        }
-        log('取数路径② 成功（content script）', url);
-        return data;
+        const data = parseXQResponse(r, url);
+        if (data) { log('取数路径② 成功（content script）', url); return data; }
       }
     } catch (e) {
       if (/429|HTTP \d/.test(e.message)) throw e;
@@ -297,19 +255,11 @@ async function fetchJSON(url, opts = {}) {
     }
   }
 
-  // ③ 显式 Cookie 注入（用户粘贴的 / chrome.cookies 读到的）
-  const cookieHeader = await getXueqiuCookies();
-  if (cookieHeader) {
-    log('取数路径③ 使用 Cookie 注入：', url);
-    return fetchWithCookie(url, opts, cookieHeader);
-  }
-
-  // 全部失败
+  // 全部失败：本扩展要求保持至少一个雪球标签页打开，由 ①/② 在标签页内注入完成取数
+  // （SW 跨域 fetch 无法携带雪球 Cookie，故不设「无标签页」的 Cookie 兜底路径）。
   throw new Error(
-    '无法获取登录态。请确保：\n' +
-    '1. Chrome 已打开并登录 xueqiu.com（保持至少一个雪球标签页打开）\n' +
-    '2. 扩展已拥有「标签页 / 脚本」权限（chrome://extensions 里检查）\n' +
-    '3. 或在设置页手动粘贴 Cookie（F12 → Network → 复制 Cookie 整行）'
+    '无法获取登录态。请确保已在 Chrome 打开并登录 xueqiu.com（保持至少一个雪球标签页打开）' +
+    '——本扩展通过标签页内注入的方式随用随取，无需手动配置 Cookie。'
   );
 }
 
@@ -505,10 +455,15 @@ function extractStatuses(data) {
   return [];
 }
 
-async function getUserTimeline(userId, page = 1) {
+async function getUserTimeline(userId, page = 1, sinceId = 0) {
+  // 防御式增量：附加 since_id 只取该 id 之后的新帖，减少流量与 429 概率。
+  // 同时保留 checkOnce 里的客户端 id 过滤作安全网——即使雪球接口不认 since_id
+  // （参数名不符）也只会多返回几条旧帖，客户端过滤仍能正确识别新帖，不会漏。
+  const since = Number(sinceId || 0);
+  const sinceParam = since > 0 ? `&since_id=${since}` : '';
   const urls = [
-    `${XQ_BASE}/v4/statuses/user_timeline.json?user_id=${userId}&page=${page}&count=10`,
-    `${XQ_BASE}/statuses/user_timeline.json?user_id=${userId}&page=${page}&count=10`,
+    `${XQ_BASE}/v4/statuses/user_timeline.json?user_id=${userId}&page=${page}&count=10${sinceParam}`,
+    `${XQ_BASE}/statuses/user_timeline.json?user_id=${userId}&page=${page}&count=10${sinceParam}`,
   ];
   let lastErr;
   for (const u of urls) {
@@ -536,19 +491,35 @@ function postUrl(userId, postId) {
 
 function stripHtml(html) {
   if (!html) return '';
-  return html
-    .replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n')
+  return String(html)
+    // 1) 整段移除「不会显示」的内容：注释、样式表、脚本
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+    // 2) 块级/换行标签转换行
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/h[1-6]>|<\/tr>/gi, '\n')
+    // 3) 剥掉所有剩余标签
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
+    // 4) 解码实体（&amp; 必须先于其他实体，才能正确处理双重转义）
     .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, c) => {
+      try { return String.fromCodePoint(Number(c)); } catch (e) { return ''; }
+    })
+    .replace(/\u00A0/g, ' ')   // &#160; 归一为普通空格
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&hellip;/g, '…').replace(/&mdash;/g, '—').replace(/&ndash;/g, '–')
+    // 5) 清理空白与多余换行
+    .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{2,}/g, '\n')
     .trim();
 }
 
 function truncate(s, n) {
-  return s.length <= n ? s : s.slice(0, n - 1) + '…';
+  // 用 Array.from 按码点切分，避免 emoji / 代理对（length=2）在边界被劈成半个字符
+  const chars = Array.from(s == null ? '' : String(s));
+  if (n == null) return chars.join('');
+  return chars.length <= n ? s : chars.slice(0, n - 1).join('') + '…';
 }
 
 // ---------- 测试提醒（验证 系统通知 / 弹窗 / 声音 链路）----------
@@ -577,6 +548,23 @@ async function testNotify() {
   return { ok: true };
 }
 
+// 通知点击 → 原帖 URL 映射：模块级内存缓存 + 异步整写落盘，
+// 避免多条通知回调并发时 storage 读改写覆盖（lost update）。
+const urlMap = {};
+
+// ---------- 启动引导（ready） ----------
+// MV3 Service Worker 每次冷启动都从头执行本文件，urlMap 等内存状态需从 storage 恢复。
+// 但 onInstalled / onAlarm / onStartup 可能在恢复完成前就触发 → 用 ready Promise 显式化
+// 「恢复完成」这一刻，关键监听器 await 它，杜绝竞态。
+const ready = (async () => {
+  try {
+    const d = await chrome.storage.local.get('urlMap');
+    Object.assign(urlMap, (d && d.urlMap) || {});
+  } catch (e) {
+    // 测试 / 无 storage 环境：忽略，urlMap 留空即可
+  }
+})();
+
 // ---------- 通知 ----------
 async function notifyNewPosts(posts) {
   log('生成系统通知 ×' + posts.length);
@@ -593,11 +581,9 @@ async function notifyNewPosts(posts) {
       requireInteraction: true, // 不自动消失，需手动关闭/点击
       buttons: [{ title: '打开原帖' }],
     }, () => {
-      chrome.storage.local.get('urlMap', ({ urlMap }) => {
-        const m = urlMap || {};
-        m[id] = url;
-        chrome.storage.local.set({ urlMap: m });
-      });
+      // JS 单线程，回调写内存对象不会并发覆盖；再整写落盘（即使后写也含全部 key）
+      urlMap[id] = url;
+      chrome.storage.local.set({ urlMap: Object.assign({}, urlMap) });
     });
   }
   await pushWecom(posts);
@@ -673,6 +659,12 @@ async function ensureOffscreen() {
   if (!chrome.offscreen) return false;
   if (offscreenReady) return true;
   try {
+    // 冷启动检查：SW 重启后内存 offscreenReady 归零，但离屏文档可能仍在跑。
+    // 先问浏览器要文档是否真实存在，避免重复 create 触发 "exists" 错误分支。
+    if (chrome.offscreen.hasDocument) {
+      const exists = await chrome.offscreen.hasDocument();
+      if (exists) { offscreenReady = true; return true; }
+    }
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
       reasons: ['AUDIO_PLAYBACK'],
@@ -955,6 +947,39 @@ async function maybeRepopAlert() {
 }
 
 // ---------- 主检查逻辑 ----------
+// 有限并发：把 items 按 limit 并发交给 fn，结果顺序与 items 一致
+async function mapConcurrent(items, limit, fn) {
+  const results = new Array(items.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++;                 // idx++ 是同步原子操作，并发 worker 不会取到同一 i
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const n = Math.max(1, Math.min(limit || 1, items.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return results;
+}
+
+// 单用户：拉时间线 → 过滤新帖 → 返回 maxId / 映射后的新帖 / 状态
+async function fetchUserFresh(u, lastIds, initialized) {
+  try {
+    const localMax = Number(lastIds[u.id] || 0);
+    const tl = await getUserTimeline(u.id, 1, localMax);   // 传 since_id 做防御式增量
+    const fresh = tl.filter(s => Number(s.id) > localMax);
+    const maxId = tl.reduce((mx, s) => Math.max(mx, Number(s.id)), localMax);
+    let mapped = [];
+    if (fresh.length && initialized) {
+      fresh.sort((a, b) => Number(b.id) - Number(a.id));   // 用户内新→旧
+      mapped = fresh.map(s => ({ ...s, _name: u.name, _id: u.id }));
+    }
+    return { id: u.id, name: u.name, ok: true, parsed: tl.length, maxId, mapped };
+  } catch (e) {
+    return { id: u.id, name: u.name, ok: false, error: e.message };
+  }
+}
+
 async function checkOnce() {
   const opts = await getOptions();
   log('── 开始轮询检查（间隔', opts.intervalMin, '分钟）──');
@@ -976,27 +1001,21 @@ async function checkOnce() {
   const perUser = {};
   let runError = '';
 
-  for (const u of users) {
-    try {
-      const tl = await getUserTimeline(u.id);
-      perUser[u.id] = { name: u.name, ok: true, parsed: tl.length };
-      if (!tl.length) continue;
-      const localMax = Number(lastIds[u.id] || 0);
-      const fresh = tl.filter(s => Number(s.id) > localMax);
-      if (fresh.length) {
-        const maxId = tl.reduce((mx, s) => Math.max(mx, Number(s.id)), localMax);
-        lastIds[u.id] = maxId;
-        if (initialized) {
-          fresh.sort((a, b) => Number(b.id) - Number(a.id)); // 新→旧
-          newAll.push(...fresh.map(s => ({ ...s, _name: u.name, _id: u.id })));
-        }
-      }
-    } catch (e) {
-      log('时间线拉取失败', u.id, e.message);
-      perUser[u.id] = { name: u.name, ok: false, error: e.message };
-      runError = runError || e.message;
+  // 有限并发抓取（默认 3 路），避免串行慢 + 易触发 429；
+  // 各用户独立解析，结果按 users 顺序合并，最后全局按时间线排序。
+  const results = await mapConcurrent(users, 3, u => fetchUserFresh(u, lastIds, initialized));
+  for (const r of results) {
+    if (r.ok) {
+      perUser[r.id] = { name: r.name, ok: true, parsed: r.parsed };
+      if (r.maxId !== undefined) lastIds[r.id] = r.maxId;
+      if (r.mapped) newAll.push(...r.mapped);
+    } else {
+      perUser[r.id] = { name: r.name, ok: false, error: r.error };
+      runError = runError || r.error;
     }
   }
+  // 全局按帖子 id 降序：避免跨用户按遍历顺序而非真实时间线排列
+  newAll.sort((a, b) => Number(b.id) - Number(a.id));
 
   await chrome.storage.local.set({
     lastIds,
@@ -1044,13 +1063,15 @@ function scheduleAlarm(min) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await ready; // 等 urlMap 等内存状态从 storage 恢复完，再跑首轮
   const opts = await getOptions();
   log('扩展已安装/更新，调度轮询（间隔', opts.intervalMin, '分钟），立即首跑');
   scheduleAlarm(opts.intervalMin);
   checkOnce(); // 首次立即跑一次（只记录不推送）
 });
 
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
+  await ready;
   log('浏览器启动，检查/重建轮询');
   chrome.alarms.get('poll', (a) => {
     if (!a) getOptions().then(o => scheduleAlarm(o.intervalMin));
@@ -1058,15 +1079,17 @@ chrome.runtime.onStartup.addListener(() => {
   checkOnce();
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'poll') { log('alarm 触发：开始轮询'); checkOnce(); }
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'poll') { await ready; log('alarm 触发：开始轮询'); checkOnce(); }
 });
 
 // ---------- 通知点击 / 按钮 ----------
 function openPost(nid) {
-  chrome.storage.local.get('urlMap', ({ urlMap }) => {
-    const url = urlMap && urlMap[nid];
-    if (url) chrome.tabs.create({ url });
+  const url = urlMap[nid];
+  if (url) { chrome.tabs.create({ url }); chrome.notifications.clear(nid); return; }
+  chrome.storage.local.get('urlMap', ({ urlMap: m }) => {
+    const u = m && m[nid];
+    if (u) chrome.tabs.create({ url: u });
     chrome.notifications.clear(nid);
   });
 }
@@ -1076,141 +1099,82 @@ chrome.notifications.onButtonClicked.addListener(openPost);
 // （弹窗 onRemoved 监听已在上文 openAlertWindow 处注册，此处不再重复）
 
 // ---------- 与弹窗/选项页通信 ----------
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === 'getLog') {
-    getLog().then(entries => sendResponse({ ok: true, entries }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'clearLog') {
-    clearLog().then(() => sendResponse({ ok: true }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'clearErrors') {
-    clearErrors().then(() => sendResponse({ ok: true }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'checkNow') {
-    checkOnce().then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'getStatus') {
-    chrome.storage.local.get(['lastCheck', 'recent', 'trackedCount', 'perUser', 'lastError', 'lastRunAt', 'initialized'], d => sendResponse(d));
-    return true;
-  }
-  if (msg.type === 'testWecom') {
-    // 设置页「测试企微推送」按钮：发一条测试文本，验证 corpid/secret/agentid/touser 是否可用
-    getOptions().then(opts => {
-      const cfg = msg.cfg || opts.wecom;
-      if (!cfg || !cfg.enabled) { sendResponse({ ok: false, err: '企微推送未开启，请先在④勾选「启用」' }); return; }
-      if (!cfg.corpid || !cfg.corpsecret || !cfg.agentid) { sendResponse({ ok: false, err: '企微配置不完整（需 corpid / corpsecret / agentid）' }); return; }
-      sendWecomText(cfg, '【雪球·特别关注】这是一条测试推送 ✅\n若你在微信里收到本条，说明配置成功。')
-        .then(() => sendResponse({ ok: true }))
-        .catch(e => sendResponse({ ok: false, err: e.message }));
-    }).catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'saveOptions') {
-    chrome.storage.local.set({ options: msg.options }).then(() => {
-      scheduleAlarm(msg.options.intervalMin);
-      sendResponse({ ok: true });
-    });
-    return true;
-  }
-  if (msg.type === 'apiGet') {
-  // 选项页代理请求：走统一入口 fetchJSON（自动按 scripting 注入 > content script > Cookie 注入 选最佳路径）
-  fetchJSON(msg.url).then(data => {
-    sendResponse({ ok: true, data, method: '自动（scripting 注入 / content script / Cookie 注入）' });
-  }).catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'testNotify') {
-    testNotify().then(r => sendResponse(r)).catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'markRead') {
-    // 弹窗里点了某条帖子 → 标记已读，返回剩余未读数
-    markPostRead(msg.postId).then(left => sendResponse({ ok: true, left }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'markAllRead') {
-    // 弹窗「全部已读」按钮：把 recent 里所有未读条目标记为已读
-    (async () => {
-      try {
-        const { recent } = await chrome.storage.local.get(['recent']);
-        const items = recent || [];
-        let count = 0;
-        for (const it of items) { if (!it.read) { it.read = true; count++; } }
-        await chrome.storage.local.set({ recent: items });
-        log('全部已读：标记', count, '条');
-        sendResponse({ ok: true, marked: count });
-      } catch (e) {
-        sendResponse({ ok: false, err: e.message });
-      }
-    })();
-    return true;
-  }
-  if (msg.type === 'closeAllAlerts') {
-    // 弹窗「全部已读」按钮：标记全部已读 + 关掉所有 alert 弹窗（含跨 SW 孤儿窗口）
-    (async () => {
-      try {
-        const { recent } = await chrome.storage.local.get(['recent']);
-        const items = recent || [];
-        let count = 0;
-        for (const it of items) { if (!it.read) { it.read = true; count++; } }
-        await chrome.storage.local.set({ recent: items });
-        log('全部已读并关闭所有弹窗：标记', count, '条');
-      } catch (e) { logErr('closeAllAlerts 标记已读失败：', e.message); }
-      await closeAllAlertWindows();
-      sendResponse({ ok: true });
-    })();
-    return true;
-  }
-  if (msg.type === 'closeAllAlertWindows') {
-    // 仅关闭所有 alert 弹窗（不标记已读），供「关闭」按钮清理残留窗口
-    closeAllAlertWindows().then(() => sendResponse({ ok: true }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'uiLog') {
-    // 弹窗页面里记回来的交互日志（如「点击卡片打开原帖」）
+// ── 消息路由：用 dispatch map 替代一长串 if (msg.type === 'xxx') ──
+// 每个 handler 返回结果对象（或原始值），由统一包装负责 sendResponse；
+// 返回 undefined 视为 { ok: true }，handler 抛错则回包 { ok:false, err }。
+// 新增一个消息类型 = 在 msgHandlers 里加一行，无需再复制粘贴 try/catch + return true。
+const msgHandlers = {
+  async getLog() { return { ok: true, entries: await getLog() }; },
+  async clearLog() { await clearLog(); return { ok: true }; },
+  async clearErrors() { await clearErrors(); return { ok: true }; },
+  async checkNow() { await checkOnce(); return { ok: true }; },
+  async getStatus() {
+    return chrome.storage.local.get(['lastCheck', 'recent', 'trackedCount', 'perUser', 'lastError', 'lastRunAt', 'initialized']);
+  },
+  async testWecom(msg) {
+    const opts = await getOptions();
+    const cfg = msg.cfg || opts.wecom;
+    if (!cfg || !cfg.enabled) return { ok: false, err: '企微推送未开启，请先在④勾选「启用」' };
+    if (!cfg.corpid || !cfg.corpsecret || !cfg.agentid) return { ok: false, err: '企微配置不完整（需 corpid / corpsecret / agentid）' };
+    await sendWecomText(cfg, '【雪球·特别关注】这是一条测试推送 ✅\n若你在微信里收到本条，说明配置成功。');
+    return { ok: true };
+  },
+  async saveOptions(msg) {
+    await chrome.storage.local.set({ options: msg.options });
+    scheduleAlarm(msg.options.intervalMin);
+    return { ok: true };
+  },
+  async apiGet(msg) {
+    const data = await fetchJSON(msg.url);
+    return { ok: true, data, method: '自动（scripting 注入 / content script）' };
+  },
+  async testNotify() { return await testNotify(); },
+  async markRead(msg) { return { ok: true, left: await markPostRead(msg.postId) }; },
+  async markAllRead() {
+    const { recent } = await chrome.storage.local.get(['recent']);
+    const items = recent || [];
+    let count = 0;
+    for (const it of items) { if (!it.read) { it.read = true; count++; } }
+    await chrome.storage.local.set({ recent: items });
+    log('全部已读：标记', count, '条');
+    return { ok: true, marked: count };
+  },
+  async closeAllAlerts() {
+    const { recent } = await chrome.storage.local.get(['recent']);
+    const items = recent || [];
+    let count = 0;
+    for (const it of items) { if (!it.read) { it.read = true; count++; } }
+    await chrome.storage.local.set({ recent: items });
+    log('全部已读并关闭所有弹窗：标记', count, '条');
+    await closeAllAlertWindows();
+    return { ok: true };
+  },
+  async closeAllAlertWindows() { await closeAllAlertWindows(); return { ok: true }; },
+  async uiLog(msg) {
     if (msg.level === 'ERROR') logErr('[弹窗] ' + msg.msg);
     else if (msg.level === 'WARN') logWarn('[弹窗] ' + msg.msg);
     else log('[弹窗] ' + msg.msg);
-    sendResponse({ ok: true });
-    return true;
-  }
-  if (msg.type === 'openAlert') {
-    // 手动唤出提醒窗口（popup 按钮 / 其他入口）
-    openAlertWindow().then(() => sendResponse({ ok: true }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'getUnread') {
-    unreadCount().then(n => sendResponse({ ok: true, unread: n }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'getSpecialFollow') {
-    getSpecialFollowUsers().then(users => sendResponse({ ok: true, users }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'diagnose') {
-    diagnose().then(report => sendResponse({ ok: true, report }))
-      .catch(e => sendResponse({ ok: false, err: e.message }));
-    return true;
-  }
-  if (msg.type === 'setSound') {
+    return { ok: true };
+  },
+  async openAlert() { await openAlertWindow(); return { ok: true }; },
+  async getUnread() { return { ok: true, unread: await unreadCount() }; },
+  async getSpecialFollow() { return { ok: true, users: await getSpecialFollowUsers() }; },
+  async diagnose() { return { ok: true, report: await diagnose() }; },
+  async setSound(msg) {
     // 用户在设置页勾选=一次用户手势，正好用来解锁音频
-    if (msg.on) {
-      ensureOffscreen().then(ok => sendResponse({ ok }));
-    } else {
-      closeOffscreen().then(() => sendResponse({ ok: true }));
-    }
-    return true;
-  }
+    if (msg.on) { const ok = await ensureOffscreen(); return { ok }; }
+    await closeOffscreen();
+    return { ok: true };
+  },
+};
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const handler = msgHandlers[msg.type];
+  if (!handler) return; // 不归本扩展处理，交还其它监听器
+  // 统一包装：handler 可能同步抛错，用 Promise 兜住；异步结果经 sendResponse 回包
+  Promise.resolve()
+    .then(() => handler(msg, sender))
+    .then(r => sendResponse(r === undefined ? { ok: true } : r))
+    .catch(e => sendResponse({ ok: false, err: e.message }));
+  return true; // 保持消息通道开放，异步 sendResponse
 });
