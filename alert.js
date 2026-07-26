@@ -41,11 +41,18 @@ function resizeToContent() {
     const ft = document.querySelector('.ft');
     const hdH = hd ? hd.offsetHeight : 44;
     const ftH = ft ? ft.offsetHeight : 32;
-    const desired = hdH + measureContentHeight() + ftH;
+    const contentH = measureContentHeight();
+    // chrome.windows.update 的 height 是外部高度（含 Windows 标题栏 ~30-38px）
+    // 必须加上 outerHeight - innerHeight 的差值，否则内容会被标题栏截断
+    const chromeDelta = window.outerHeight - window.innerHeight;
+    const desired = hdH + contentH + ftH + chromeDelta;
     const MIN = 240, MAX = 540;
     const h = Math.max(MIN, Math.min(MAX, Math.round(desired)));
     chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { height: h });
-  } catch (e) {}
+    uiLog('INFO', '高度自适应 → 内容=' + contentH + ' +头尾=' + (hdH+ftH) + ' +标题栏=' + chromeDelta + ' → 设定=' + h + 'px');
+  } catch (e) {
+    uiLog('ERROR', '高度自适应异常：' + e.message);
+  }
 }
 
 function groupUnread(items) {
@@ -165,22 +172,19 @@ async function applyAppearance() {
 // ═══════════════════════════════════════════════════
 function snapToRight() {
   try {
-    // 用弹窗所在屏幕的可用区域右边界（最可靠——与渲染坐标同源）
-    const availLeft = window.screen.availLeft || window.screen.left || 0;
-    const availWidth = window.screen.availWidth || window.screen.width || 1920;
-    const screenRight = availLeft + availWidth;
-
+    // 关键修复：必须用 screen.width（物理屏幕完整宽度），而非 availWidth（工作区宽度，会排除任务栏等）
+    // availWidth 在某些 Windows 配置下会比真实屏宽小 80~128px，导致永远贴不上
+    const screenW = window.screen.width;
     const curRight = window.screenX + window.outerWidth;
-    const gap = screenRight - curRight;
+    const gap = screenW - curRight;
 
-    uiLog('INFO', '贴边检测 → 屏幕右=' + screenRight + ' 窗口右=' + curRight + ' gap=' + gap + 'px (availLeft=' + availLeft + ' availWidth=' + availWidth + ' screenX=' + window.screenX + ' outerW=' + window.outerWidth + ')');
+    uiLog('INFO', '贴边检测 → 屏幕宽=' + screenW + ' 窗口右=' + curRight + ' gap=' + gap + 'px (screenX=' + window.screenX + ' outerW=' + window.outerWidth + ')');
 
-    if (gap > 2) {
+    if (gap > 3) {
       const newLeft = Math.round(window.screenX + gap);
       chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
       uiLog('INFO', '贴边校正 → 左=' + newLeft + ' (右移+' + Math.round(gap) + 'px)');
     } else if (gap < -5) {
-      // 窗口超出屏幕右边界（不太可能但防一下），往左拉回
       const newLeft = Math.round(window.screenX + gap);
       chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { left: newLeft });
       uiLog('INFO', '贴边回正 → 左=' + newLeft + ' (左移' + Math.round(gap) + 'px)');
@@ -201,9 +205,10 @@ chrome.runtime.onMessage.addListener((msg) => {
 (async () => {
   await applyAppearance();
   render();
-  // 分 4 个时间点调用，确保在 DWM / 字体渲染 / 动画结束后都能校正到位
+  // 分 5 个时间点调用，确保在 DWM / 字体渲染 / 动画结束后都能校正到位
   setTimeout(() => { snapToRight(); resizeToContent(); }, 60);
   setTimeout(() => { snapToRight(); resizeToContent(); }, 250);
   setTimeout(() => { snapToRight(); resizeToContent(); }, 600);
-  setTimeout(resizeToContent, 1200);
+  setTimeout(() => { snapToRight(); resizeToContent(); }, 1200);
+  setTimeout(() => { snapToRight(); resizeToContent(); }, 2000);
 })();
