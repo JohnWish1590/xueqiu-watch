@@ -84,7 +84,7 @@
     /* 明亮/黑暗分段按钮：紧贴关闭按钮右侧，靠右对齐 */
     .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 0; margin-left: 2px; }
     .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 10px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; }
-    .hd .theme-toggle .theme-btn.active { background: var(--logo-color); color: #fff; }
+    .hd .theme-toggle .theme-btn.active { background: var(--btn-p-color); color: #fff; }
     .hd .theme-toggle .theme-btn:hover { opacity: .85; }
 
     /* ── 消息列表 ── */
@@ -161,9 +161,17 @@
 
     /* ── 底部提示栏（左对齐）── */
     .ft {
-      font-size: 11px; font-weight: 400; color: var(--footer); text-align: left; padding: 8px 14px 8px 25px;
+      font-size: 11px; font-weight: 400; color: var(--footer); text-align: left; padding: 10px 14px 10px 25px;
       flex-shrink: 0; background: transparent; line-height: 1.5; border-top: 0.5px solid var(--footer-border);
     }
+
+    /* ── 折叠行：与底部说明文字同左对齐线（25px = 列表14px + 自身11px）── */
+    .fold {
+      font-size: 11px; font-weight: 500; color: var(--btn-p-color);
+      padding: 10px 0 10px 11px; cursor: pointer; user-select: none;
+      transition: opacity .15s; margin-top: 2px;
+    }
+    .fold:hover { opacity: .7; }
   </style>
 </head>
 <body>
