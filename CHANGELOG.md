@@ -5,6 +5,38 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.4.4] - 2026-07-26
+
+> 🛡️ **根治空白孤儿窗口（chrome://newtab）问题**。已装用户请开发者模式重新加载覆盖升级。
+
+### Fixed
+- **空白 `chrome://newtab` 孤儿窗口反复弹出（根因修复）**：MV3 Service Worker 被浏览器空闲 ~5 分钟后杀掉 → 内存变量 `alertWinIds` 归零 → 旧弹窗还在但 SW 不知道其 ID → 扩展更新后旧弹窗 URL 从 `alert.html` 变成 `chrome://newtab`（Chrome 对失效扩展页面的默认回退）→ `findExistingAlertWin()` 只认 `alert.html` URL，匹配不上孤儿 → 以为没窗口又新建 → `maybeRepopAlert()` 每轮轮询都触发 → **堆出几十个空白窗口**。本次三管齐下：
+  1. **`alertWinIds` 持久化到 `storage.local`**：SW 重启后自动恢复，不再丢失窗口 ID
+  2. **增强 `findExistingAlertWin()` 扫描**：除正常 `alert.html` 匹配外，新增「孤儿兜底」——识别 `chrome://newtab` / `about:blank` + 弹窗尺寸（380~500 × 200~600）的 popup 窗口，当作 alert 孤儿复用并导航回 `alert.html`
+  3. **创建前清理孤儿 + 创建后验证 URL**：新弹窗创建前先扫描关闭残留孤儿；创建后 3 秒延迟验证实际 URL 是否为 `alert.html`，若不是则自动关闭此异常窗口
+- **`maybeRepopAlert()` 防抖**：两次重弹之间至少间隔 60 秒，避免 SW 重启后每轮轮询都重复创建窗口
+
+### Changed
+- **`closeAllAlertWindows()` 增强清理范围**：不只关 `alert.html` 的窗口，也清理符合孤儿特征的 popup（防止手动关闭时漏掉）
+- **`onRemoved` 监听器同步持久化**：窗口被关闭时立即同步 `alertWinIds` 到 storage
+
+---
+
+## [1.4.3] - 2026-07-26
+
+> ⚠️ **贴边根因修复 + 动态高度修正（内容不再被截断）**。已装用户请开发者模式重新加载覆盖升级。
+
+### Fixed
+- **弹窗依旧不贴边（第 5 次修复，根因终于找到）**：v1.4.2 的 `snapToRight()` 用的是 `window.screen.availWidth`（**工作区宽度 = 屏幕物理宽度减去任务栏等系统 UI 占用**），在 Windows 上这个值可能比真实屏宽小 80~128px，导致算出的"屏幕右边界"本身就偏左——**永远贴不上**。本次改为使用 `window.screen.width`（**完整物理屏幕像素宽度**），确保右边界计算精确到物理边缘。
+- **弹窗内容被截断（第二条卡片及 footer 被窗口底部切掉）**：`resizeToContent()` 测量的是 DOM 内容高度，直接传给 `chrome.windows.update({ height })`——但此 API 的 height 参数是**窗口外部高度（含 Windows 标题栏 ~30-38px）**，导致实际内容区比预期少了一整个标题栏的高度。本次修正为 `desiredContentHeight + (outerHeight - innerHeight)`，把标题栏开销加回目标高度。
+
+### Changed
+- **初始窗口高度**从 360px 提升到 420px（在动态高度生效前更安全，减少首帧截断概率）。
+- **贴边/高度校正重试增加到 5 个时间点**（60/250/600/1200/2000ms），覆盖 DWM 稳定、字体加载、动画结束等各种延迟场景。
+- **高度自适应日志增强**：每次 resizeToContent 都打印「内容 + 头尾 + 标题栏 → 设定」的明细，方便排查。
+
+---
+
 ## [1.4.2] - 2026-07-26
 
 > ⚠️ **贴边策略重构 + 按钮布局修正 + 去星号**。已装用户请开发者模式重新加载覆盖升级。
@@ -139,6 +171,7 @@
 ---
 
 <!-- 链接定义（便于跨文件跳转，无实际跳转需求可忽略） -->
+[1.4.3]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.3
 [1.4.2]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.2
 [1.4.1]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.1
 [1.4.0]: https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.0
