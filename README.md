@@ -1,9 +1,9 @@
 # 雪哨（xueqiu-watch）— 雪球特别关注新帖提醒
 
-[![version](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.3.0)
+[![version](https://img.shields.io/badge/version-1.4.0-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.0)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-brightgreen)](https://developer.chrome.com/docs/extensions/mv3/)
 [![license](https://img.shields.io/badge/license-自定义版权-important)](LICENSE)
-[![updated](https://img.shields.io/badge/最后更新-2026--07--23-informational)](https://github.com/JohnWish1590/xueqiu-watch/commits/main)
+[![updated](https://img.shields.io/badge/最后更新-2026--07--26-informational)](https://github.com/JohnWish1590/xueqiu-watch/commits/main)
 
 > 雪哨是「雪球特别关注 新帖提醒」的正式品牌名；仓库与扩展标识统一为 **xueqiu-watch**。
 > 运行**不需要** WorkBuddy，不需要 Node / Python 等任何开发环境，不需要本地编译。详见下方「安装 / 快速部署」。
@@ -22,7 +22,7 @@
 
 - **① 系统通知**：新帖时 Windows 右下角 toast，`priority:2` + `requireInteraction:true`，即便 Chrome 最小化也会在桌面出现、不自动消失。
 - **② 声音提示**（可选）：用 Offscreen Document + Web Audio 播「滴-滴」声，Chrome 最小化也响；被浏览器自动播放策略拦住时自动改系统朗读。
-- **③ 右侧磁吸常驻弹窗**：从屏幕右侧滑入，按博主合并未读卡片、点击打开原帖+标已读、「全部已读」一键清空；全读完自动关闭，3 分钟未读自动重弹。
+- **③ 右侧磁吸常驻弹窗**：从屏幕右侧滑入，按博主合并未读卡片、点击打开原帖+标已读、「已读全部」一键清空；全读完自动关闭，3 分钟未读自动重弹。**外观可在设置页切换**：两种布局（紧凑精准·卡片式 / 收件箱式·分隔线行）× 两种主题（明亮 / 黑暗）。
 - **④ 企业微信推送到微信**（可选）：同时把新帖发到你的个人微信——电脑前桌面微信跳出、离开电脑手机微信收到。
 - **零配置登录检测**：借已登录的雪球标签页注入 fetch 自动取登录态，无需手动复制 Cookie。
 - **一键诊断 + 运行日志**：逐环节排查登录态获取路径，出错时把日志发作者即可定位。
@@ -77,6 +77,11 @@
 - 想先验证提醒链路通不通？打开**设置页**点「📢 发送测试提醒」，会立刻弹一条测试通知 + 小窗（声音需在设置里开启）。
 
 ### 设置（点面板底部「⚙️ 设置」）
+
+- **外观设置（弹窗样式）**：在设置页「外观设置」区块，可分别选择**弹窗布局**（紧凑精准·卡片式 / 收件箱式·分隔线行）与**弹窗主题**（明亮 / 黑暗）。切换即写入、下次弹窗生效（也可点「💾 保存所有设置」统一保存）。默认：紧凑精准 + 明亮。
+  1. 紧凑精准（卡片式）：带圆角边框的卡片，马卡龙色圆角头像，双行摘要，适合少量未读时精致呈现。
+  2. 收件箱式（分隔线行）：无卡片框、用分隔线分行、单行摘要，一屏能塞更多条，像邮件收件箱。
+  3. 明亮 / 黑暗：同一套布局的浅色与深色配色，夜间不刺眼。
 
 1. **检测登录**：点一下，扩展自动借已登录的雪球标签页读取登录态，显示「✅ 已登录 — 用户名：xxx」。无需 DevTools、无需手动复制 Cookie。
 2. **选择要监控的博主**：点「📋 读取特别关注分组」，自动拉出你的特别关注成员列表，勾选你想监控的人即可（勾选结果自动写入监控名单）。
