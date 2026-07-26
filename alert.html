@@ -12,7 +12,7 @@
       --logo-color:#F53F3F;
       --btn-p-color:#1E6FFF; --btn-p-border:#1E6FFF;
       --btn-g-color:#86909C; --btn-g-border:#D9D9D9;
-      --card-bg:#FFFFFF; --card-border:#EFEFEF;
+      --card-bg:#F3F4F6; --card-border:#E6E8EC;
       --name:#1D2129; --summary:#4E5969;
       --badge:#F53F3F;
       --footer:#86909C; --footer-border:#F2F2F2;
@@ -26,7 +26,7 @@
       --logo-color:#FF6B6B;
       --btn-p-color:#7AA2FF; --btn-p-border:#3A3A44;
       --btn-g-color:#8A8A92; --btn-g-border:#444450;
-      --card-bg:#26262C; --card-border:#33333B;
+      --card-bg:#2A2A30; --card-border:#3A3A42;
       --name:#E8E8EA; --summary:#8A8A92;
       --badge:#F53F3F;
       --footer:#6E6E76; --footer-border:#2E2E34;
@@ -153,7 +153,7 @@
 
     /* ── 底部提示栏 ── */
     .ft {
-      font-size: 11px; font-weight: 400; color: var(--footer); text-align: center; padding: 8px 10px;
+      font-size: 11px; font-weight: 400; color: var(--footer); text-align: left; padding: 8px 14px;
       flex-shrink: 0; background: transparent; line-height: 1.5; border-top: 0.5px solid var(--footer-border);
     }
   </style>
@@ -161,8 +161,6 @@
 <body>
   <div class="hd">
     <div class="hd-left">
-      <svg class="hd-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L13.09 8.26L19 6.64L15.27 11.73L20.18 16.36L14.25 15.04L12.68 21L10.75 15.1L4.82 16.36L9.73 11.73L6 6.64L11.91 8.26Z"/></svg>
-      <span class="hd-title">雪哨</span>
       <span class="total" id="total"></span>
     </div>
     <div class="hd-right">
