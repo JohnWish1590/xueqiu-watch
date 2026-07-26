@@ -1,6 +1,6 @@
 # 雪哨（xueqiu-watch）— 雪球特别关注新帖提醒
 
-[![version](https://img.shields.io/badge/version-1.4.2-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.2)
+[![version](https://img.shields.io/badge/version-1.4.3-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.4.3)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-brightgreen)](https://developer.chrome.com/docs/extensions/mv3/)
 [![license](https://img.shields.io/badge/license-自定义版权-important)](LICENSE)
 [![updated](https://img.shields.io/badge/最后更新-2026--07--26-informational)](https://github.com/JohnWish1590/xueqiu-watch/commits/main)
@@ -51,7 +51,7 @@
 
 ### 方式一：开发者模式加载已解压（当前唯一分发方式，推荐）
 
-1. 下载本仓库 Release 中的 `xueqiu-watch-v1.4.2.zip`，或 `git clone` 后取仓库目录，解压。
+1. 下载本仓库 Release 中的 `xueqiu-watch-v1.4.3.zip`，或 `git clone` 后取仓库目录，解压。
 2. 浏览器地址栏输入 `chrome://extensions`（Edge 为 `edge://extensions`）。
 3. 右上角打开 **开发者模式（Developer mode）**。
 4. 点 **加载已解压的扩展程序（Load unpacked）**，选择解压后的目录。
