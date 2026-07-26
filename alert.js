@@ -165,8 +165,39 @@ async function applyAppearance() {
     const a = s.appearance || { layout: 'card', theme: 'light' };
     if (a.theme === 'dark') document.body.classList.add('theme-dark');
     if (a.layout === 'inbox') document.body.classList.add('layout-inbox');
+    updateThemeButtons();
   } catch (e) {}
 }
+
+// 头部 明亮/黑暗 分段按钮：高亮当前主题
+function updateThemeButtons() {
+  try {
+    const isDark = document.body.classList.contains('theme-dark');
+    const lb = document.getElementById('themeLight');
+    const db = document.getElementById('themeDark');
+    if (lb) lb.classList.toggle('active', !isDark);
+    if (db) db.classList.toggle('active', isDark);
+  } catch (e) {}
+}
+
+// 切换主题并持久化到 storage
+async function setTheme(theme) {
+  try {
+    const s = await new Promise(r => chrome.storage.local.get('appearance', r));
+    const a = s.appearance || { layout: 'card', theme: 'light' };
+    a.theme = theme;
+    await chrome.storage.local.set({ appearance: a });
+    if (theme === 'dark') document.body.classList.add('theme-dark');
+    else document.body.classList.remove('theme-dark');
+    updateThemeButtons();
+    uiLog('INFO', '切换主题 => ' + theme);
+  } catch (e) {
+    uiLog('ERROR', '切换主题失败：' + e.message);
+  }
+}
+
+document.getElementById('themeLight').addEventListener('click', () => setTheme('light'));
+document.getElementById('themeDark').addEventListener('click', () => setTheme('dark'));
 
 // ═══════════════════════════════════════════════════
 // 贴边精校（闭环校正版）
