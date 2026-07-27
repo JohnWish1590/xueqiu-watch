@@ -21,11 +21,6 @@ function postUrl(userId, postId) {
   return `https://xueqiu.com/${userId || '0'}/${postId}`;
 }
 
-// 浏览器顶部 chrome（标签栏 + 地址栏 + 可能的收藏夹栏）高度估算。
-// 弹窗垂直锚定在「当前屏内容区顶部 + 此留白」处，刚好落在标签栏下方，
-// 不再依赖 Chrome 默认位置（默认会落在屏幕顶端、盖住标签栏）。
-const BROWSER_CHROME_HEIGHT = 150;
-
 // ── 文字截断由 CSS 完成 ──
 // .summary 用 -webkit-line-clamp:2 限制最多 2 行，超出显示省略号
 // 卡片 .row 用 overflow:hidden 保证内容不溢出圆角框（包括 CJK 字符）
@@ -326,8 +321,12 @@ function snapTop() {
             }
           }
           if (!target) { uiLog('WARN', '垂直定位跳过：无可用显示器信息'); return; }
-          const top = Math.round(target.top + BROWSER_CHROME_HEIGHT);
-          uiLog('INFO', '垂直定位 => 屏顶=' + target.top + ' +留白=' + BROWSER_CHROME_HEIGHT + ' => top=' + top);
+          // 浏览器顶部栏(标题栏+标签栏+地址栏)高度按屏幕 DPI 估算，避免写死像素在不同缩放下偏差过大：
+          // 100% 缩放≈108px、125%≈135px、150%≈162px，+4 安全留边 => 弹窗顶部刚好落在浏览器顶栏下方(红线处)。
+          const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+          const chromeH = Math.round(108 * dpr) + 4;
+          const top = Math.round(target.top + chromeH);
+          uiLog('INFO', '垂直定位 => 屏顶=' + target.top + ' +顶栏(' + dpr + 'x)=' + chromeH + ' => top=' + top);
           chrome.windows.update(chrome.windows.WINDOW_ID_CURRENT, { top });
         } catch (e) {
           uiLog('ERROR', '垂直定位异常：' + e.message);

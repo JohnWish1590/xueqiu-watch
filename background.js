@@ -815,7 +815,7 @@ async function getActiveBrowserWindow() {
 }
 
 // 浏览器顶部 chrome（标签栏 + 地址栏 + 收藏夹栏）的高度估算
-const BROWSER_CHROME_HEIGHT = 150;
+const BROWSER_CHROME_HEIGHT = 95;
 
 async function openAlertWindow() {
   try {
