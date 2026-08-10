@@ -426,15 +426,36 @@ async function getSpecialFollowUsers(opts = {}) {
     if (Array.isArray(target.users) && target.users.length) {
       return target.users.map(u => ({ id: String(u.id), name: u.screen_name || u.name || '' }));
     }
-    // 否则拉成员列表（members 接口也兼容顶层数组 / {users} 两种形态）
-    const gid = target.id;
-    const m = await fetchJSON(`${XQ_BASE}/friendships/groups/members.json?gid=${gid}`);
-    const users = Array.isArray(m) ? m : (m.users || (m.groups && m.groups[0] && m.groups[0].users) || []);
-    return users.map(u => ({ id: String(u.id), name: u.screen_name || u.name || '' }));
+    // 否则分页拉成员列表：members 接口默认每页约 20 人，不翻页会漏掉超出一页的成员
+    const rawMembers = await fetchGroupMembersAll(target.id);
+    if (!rawMembers.length) return null;
+    return rawMembers.map(u => ({ id: String(u.id), name: u.screen_name || u.name || '' }));
   } catch (e) {
     logErr('取特别关注失败：', e.message);
     return null;
   }
+}
+
+// 分页拉取分组【全部】成员。雪球 friendships/groups/members.json 默认每页约 20 人，
+// 只在 gid 下翻 page 直到末页；返回原始用户对象数组（调用方负责映射 id/name）。
+// 修复：此前只取第 1 页，导致「特别关注」人数超过一页时，靠后的成员被整体漏掉。
+async function fetchGroupMembersAll(gid, opts = {}) {
+  const all = [];
+  const count = 20;
+  for (let page = 1; page <= 50; page++) {            // 50 页上限 ≈ 1000 人，足够
+    const m = await fetchJSON(
+      `${XQ_BASE}/friendships/groups/members.json?gid=${gid}&page=${page}&count=${count}`,
+      opts
+    );
+    const users = Array.isArray(m)
+      ? m
+      : (m.users || (m.groups && m.groups[0] && m.groups[0].users) || []);
+    if (!users.length) break;                          // 空页 → 结束
+    all.push(...users);
+    if (users.length < count) break;                   // 不足一页 → 已是末页
+    if (m && typeof m.maxPage === 'number' && page >= m.maxPage) break;  // 显式末页
+  }
+  return all;
 }
 
 // ---------- 取某用户时间线 ----------

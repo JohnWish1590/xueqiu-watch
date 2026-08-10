@@ -27,6 +27,9 @@ let groupsResponse = [
     users: [ { id: '1', screen_name: '张三' }, { id: '2', screen_name: '李四' } ] },
   { id: 102, name: '默认分组', users: [] },
 ];
+// 多页成员模拟：只在「特别关注分组不含内联 users」时启用，强制走 members.json 分页路径。
+// 形如 [ 第1页, 第2页, ... ]，每页 { users:[...], maxPage:N }
+let membersPages = null;
 let user1Posts = [ { id: 101, text: '<p>昨天发的帖</p>' }, { id: 100, text: '更早的帖' } ];
 let user2Posts = [ { id: 50, text: '李四旧帖' } ];
 
@@ -35,6 +38,14 @@ function fetchMockText(url) {
     return JSON.stringify({ error_code: 400016, error_description: '请重新登录' });
   }
   if (url && url.includes('/friendships/groups.json')) return JSON.stringify(groupsResponse);
+  if (url && url.includes('/friendships/groups/members.json')) {
+    if (membersPages) {
+      const pm = url.match(/[?&]page=(\d+)/);
+      const page = pm ? Number(pm[1]) : 1;
+      return JSON.stringify(membersPages[page - 1] || { users: [] });
+    }
+    return JSON.stringify({ users: [] });
+  }
   if (url && url.includes('/user_timeline.json')) {
     const m = url.match(/user_id=(\d+)/);
     const uid = m && m[1];
@@ -327,6 +338,21 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
   assert(tw.ok === true, 'testWecom 配置完整 → 返回 ok=true');
   let tw2 = await new Promise(r => captured.onMessage({ type: 'testWecom', cfg: { enabled: true, corpid: '', corpsecret: '', agentid: '' } }, {}, r));
   assert(tw2.ok === false, 'testWecom 配置缺失 → 返回 ok=false');
+
+  console.log('=== 场景A：特别关注超一页 → 必须翻页取全（防回归：曾只取第1页漏掉靠后成员）===');
+  // 构造一个「不含内联 users」的特别关注分组，强制走 members.json 分页路径
+  groupsResponse = [
+    { id: 101, name: '特别关注', special: true },
+  ];
+  const mp1 = [], mp2 = [];
+  for (let i = 1; i <= 20; i++) mp1.push({ id: String(i), screen_name: 'U' + i });
+  for (let i = 21; i <= 25; i++) mp2.push({ id: String(i), screen_name: 'U' + i }); // 第25人即「被漏掉的那位」
+  membersPages = [ { users: mp1, maxPage: 2 }, { users: mp2, maxPage: 2 } ];
+  let sf = await new Promise(r => captured.onMessage({ type: 'getSpecialFollow' }, {}, r));
+  assert(sf && sf.ok === true, 'getSpecialFollow 返回 ok=true');
+  assert(sf.users && sf.users.length === 25, '翻页取全 25 人（第2页 U21~U25 不再漏）');
+  assert(sf.users.some(u => u.id === '25'), '第2页末位成员 U25 已被取到（修复分页漏人）');
+  membersPages = null;
 
   console.log('=== 场景12：弹窗不重复创建 + 全部关闭（防回归多窗口堆积 bug） ===');
   // 先清空可能残留的窗口集合（跨场景隔离，内部会 alertWinIds.clear()）
