@@ -161,26 +161,3 @@
 
 完整隐私条款见 [`PRIVACY.md`](PRIVACY.md)。
 
----
-
-## License / 版权 / 联系
-
-- **版权**：本扩展源代码与发行包版权归作者所有，完整声明见 [`LICENSE`](LICENSE)。
-- **作者署名**：下一站澳门
-- **邮箱**：[cheung.cn@gmail.com](mailto:cheung.cn@gmail.com)
-- **微博**：[@下一站澳门](https://weibo.com/u/7708742647)
-- **仓库**：[https://github.com/JohnWish1590/xueqiu-watch](https://github.com/JohnWish1590/xueqiu-watch)
-
-> 免责声明：雪哨为个人学习 / 辅助工具，**与雪球（xueqiu.com）官方无任何隶属、授权或合作关系**。雪球及相关标识归其各自权利人所有。
-
----
-
-## 仓库链接
-
-- 📦 **源码 / Issues / Releases**：[https://github.com/JohnWish1590/xueqiu-watch](https://github.com/JohnWish1590/xueqiu-watch)
-- 🐛 **问题反馈**：[GitHub Issues](https://github.com/JohnWish1590/xueqiu-watch/issues)
-- 📝 **变更历史**：[CHANGELOG.md](CHANGELOG.md)
-- 🚀 **发布说明规范**：[RELEASE.md](RELEASE.md)
-- ⚡ **快速开始（部署细节）**：[docs/QUICKSTART.md](docs/QUICKSTART.md)
-- 🔒 **隐私政策**：[PRIVACY.md](PRIVACY.md)
-- 🏪 **上架清单（未来）**：[STORE_GUIDE.md](STORE_GUIDE.md)
