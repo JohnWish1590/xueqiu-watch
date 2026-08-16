@@ -161,3 +161,17 @@
 
 完整隐私条款见 [`PRIVACY.md`](PRIVACY.md)。
 
+---
+
+## 仓库链接
+
+- 📦 **源码 / Issues / Releases**：[https://github.com/JohnWish1590/xueqiu-watch](https://github.com/JohnWish1590/xueqiu-watch)
+- 🐛 **问题反馈**：[GitHub Issues](https://github.com/JohnWish1590/xueqiu-watch/issues)
+- 📝 **变更历史**：[CHANGELOG.md](CHANGELOG.md)
+- 🚀 **发布说明规范**：[RELEASE.md](RELEASE.md)
+- ⚡ **快速开始（部署细节）**：[docs/QUICKSTART.md](docs/QUICKSTART.md)
+- 🔒 **隐私政策**：[PRIVACY.md](PRIVACY.md)
+- 🏪 **上架清单（未来）**：[STORE_GUIDE.md](STORE_GUIDE.md)
+
+Socials: @下一站澳门. DM for inquiries.
+
