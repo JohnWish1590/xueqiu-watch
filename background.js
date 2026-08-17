@@ -197,10 +197,89 @@ function waitTabComplete(tabId) {
   });
 }
 
+// ---------- 雪球风控熔断（防止高频轮询触发「访问被阻断」） ----------
+// 背景：每 intervalMin 分钟对特别关注分组里 N 个用户逐个打 user_timeline.json，
+// 请求过于密集会被雪球 WAF 判为爬虫/CC，返回「您的访问被阻断」HTML 页（status 常为
+// 200/403，body 是 HTML 而非 JSON）。若不加识别，JSON 解析失败会误报「不是 JSON」，
+// 且每轮每个用户都重撞一遍，风控标记越锁越死。
+// 策略：识别阻断页 → 立即熔断（停止本轮 + 指数退避）→ 冷却期内跳过轮询 → 连续成功才复位。
+const RL_KEY = 'rateLimit';   // 持久化 { blockedUntil, retryCount }
+let rlState = null;           // 内存缓存，避免每次读 storage
+
+// 阻断页特征（雪球 WAF 页面关键词，中英文都覆盖；只看开头 2KB 足够）
+function looksLikeBlockPage(text) {
+  if (!text || typeof text !== 'string') return false;
+  const head = text.slice(0, 2000);
+  return /访问被阻断|安全威胁|被阻断|访问已被拦截|很抱歉|has been blocked|access denied|blocked by|forbidden/i.test(head);
+}
+
+async function rlLoad() {
+  if (rlState) return rlState;
+  try {
+    const s = await chrome.storage.local.get(RL_KEY);
+    rlState = s[RL_KEY] || { blockedUntil: 0, retryCount: 0 };
+  } catch (e) { rlState = { blockedUntil: 0, retryCount: 0 }; }
+  return rlState;
+}
+
+async function rlSave() {
+  try { await chrome.storage.local.set({ [RL_KEY]: rlState }); } catch (e) {}
+}
+
+// 是否处于熔断冷却期
+async function rlIsBlocked() {
+  const s = await rlLoad();
+  return Date.now() < (s.blockedUntil || 0);
+}
+
+// 退避时长（分钟）：第 1 次 5 分钟 → 10 → 20 → 30 封顶
+function rlBackoffMin(retryCount) {
+  const steps = [0, 5, 10, 20, 30];
+  const i = Math.min(Math.max(0, retryCount), steps.length - 1);
+  return steps[i];
+}
+
+// 触发熔断：retryCount 递增，冷却期指数增长，并持久化（跨 SW 重启仍有效）
+async function rlTrip(reason) {
+  const s = await rlLoad();
+  s.retryCount = (s.retryCount || 0) + 1;
+  const mins = rlBackoffMin(s.retryCount);
+  s.blockedUntil = Date.now() + mins * 60 * 1000;
+  await rlSave();
+  logErr('熔断触发：' + reason + ' → 暂停 ' + mins + ' 分钟（第 ' + s.retryCount + ' 次）');
+  return mins;
+}
+
+// 完整跑通一轮 → 复位退避计数（连续成功说明风控已解除）
+async function rlReset() {
+  const s = await rlLoad();
+  if (!s || ((s.retryCount || 0) === 0 && (s.blockedUntil || 0) === 0)) return;
+  s.retryCount = 0;
+  s.blockedUntil = 0;
+  await rlSave();
+  log('熔断解除：连续成功，重置退避计数');
+}
+
+// 串行 + 随机间隔执行：把对 N 个用户的请求均匀铺开，杜绝并发突发（触发风控的主因之一）
+async function mapSerial(items, fn, minMs, maxMs) {
+  const results = new Array(items.length);
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0) {
+      const d = minMs + Math.floor(Math.random() * (maxMs - minMs + 1));
+      await new Promise(r => setTimeout(r, d));
+    }
+    results[i] = await fn(items[i], i);
+  }
+  return results;
+}
+
 function safeParseJSON(text, url) {
   try {
     return JSON.parse(text);
   } catch (e) {
+    if (looksLikeBlockPage(text)) {
+      throw new Error('[BLOCKED] 雪球风控拦截，访问被阻断：' + url);
+    }
     throw new Error('返回的不是 JSON（可能被重定向到登录页）');
   }
 }
@@ -209,7 +288,11 @@ function safeParseJSON(text, url) {
 // 避免 ①/② 重复两份几乎一样的解析逻辑（历史上 ③ 也有一份）。
 function parseXQResponse(r, url) {
   if (!r) return null;
-  if (r.status === 429) throw new Error('触发限流 429，请稍后重试');
+  if (r.status === 429) throw new Error('[BLOCKED] 触发限流 429，请稍后重试');
+  if (r.status === 403 || r.status === 503) {
+    if (looksLikeBlockPage(r.text)) throw new Error('[BLOCKED] 雪球风控拦截（HTTP ' + r.status + '）：' + url);
+    throw new Error('HTTP ' + r.status);
+  }
   if (r.status !== 200) throw new Error('HTTP ' + r.status);
   const data = safeParseJSON(r.text, url);
   if (data && data.error_code) {
@@ -231,8 +314,10 @@ async function fetchJSON(url, opts = {}) {
         if (data) { log('取数路径① 成功（scripting 注入）', url); return data; }
       }
     } catch (e) {
-      // 网络层错误（限流 / HTTP）→ 直接抛出，不回退
-      if (/429|HTTP \d/.test(e.message)) throw e;
+      // 风控 / 限流 → 触发熔断并直接抛出（不回退，回退只会再撞一次墙）
+      if (/\[BLOCKED\]|429/.test(e.message)) { await rlTrip(e.message); throw e; }
+      // 网络层错误（HTTP）→ 直接抛出，不回退
+      if (/HTTP \d/.test(e.message)) throw e;
       // 业务层错误（未登录 / 解析失败）→ 同一用户登录态一致，回退无意义，直接抛出
       if (/错误码|不是 JSON|重定向/.test(e.message)) throw e;
       logWarn('scripting 路径不可用，回退…', e.message);
@@ -249,7 +334,8 @@ async function fetchJSON(url, opts = {}) {
         if (data) { log('取数路径② 成功（content script）', url); return data; }
       }
     } catch (e) {
-      if (/429|HTTP \d/.test(e.message)) throw e;
+      if (/\[BLOCKED\]|429/.test(e.message)) { await rlTrip(e.message); throw e; }
+      if (/HTTP \d/.test(e.message)) throw e;
       if (/错误码|不是 JSON|重定向/.test(e.message)) throw e;
       logWarn('content script 路径不可用，回退…', e.message);
     }
@@ -399,7 +485,7 @@ async function diagnose() {
 }
 
 async function getOptions() {
-  const def = { intervalMin: 2, manualUsers: '', soundOn: false, wecom: { enabled: false, corpid: '', corpsecret: '', agentid: '', touser: '' } };
+  const def = { intervalMin: 5, manualUsers: '', soundOn: false, wecom: { enabled: false, corpid: '', corpsecret: '', agentid: '', touser: '' } };
   const stored = await chrome.storage.local.get('options');
   return Object.assign(def, stored.options || {});
 }
@@ -493,7 +579,8 @@ async function getUserTimeline(userId, page = 1, sinceId = 0) {
       return extractStatuses(data);
     } catch (e) {
       lastErr = e;
-      if (/400016|请登录|重新登录|error_code/.test(e.message)) throw e; // 登录类错误，没必要再试
+      // 风控/限流/登录类错误：没必要再试第二个 URL（同一会话，重试只会再撞一次）
+      if (/\[BLOCKED\]|429|400016|请登录|重新登录|error_code/.test(e.message)) throw e;
     }
   }
   throw lastErr || new Error('时间线获取失败');
@@ -968,21 +1055,6 @@ async function maybeRepopAlert() {
 }
 
 // ---------- 主检查逻辑 ----------
-// 有限并发：把 items 按 limit 并发交给 fn，结果顺序与 items 一致
-async function mapConcurrent(items, limit, fn) {
-  const results = new Array(items.length);
-  let idx = 0;
-  async function worker() {
-    while (idx < items.length) {
-      const i = idx++;                 // idx++ 是同步原子操作，并发 worker 不会取到同一 i
-      results[i] = await fn(items[i], i);
-    }
-  }
-  const n = Math.max(1, Math.min(limit || 1, items.length));
-  await Promise.all(Array.from({ length: n }, worker));
-  return results;
-}
-
 // 单用户：拉时间线 → 过滤新帖 → 返回 maxId / 映射后的新帖 / 状态
 async function fetchUserFresh(u, lastIds, initialized) {
   try {
@@ -997,12 +1069,21 @@ async function fetchUserFresh(u, lastIds, initialized) {
     }
     return { id: u.id, name: u.name, ok: true, parsed: tl.length, maxId, mapped };
   } catch (e) {
+    // 风控/限流 → 向上抛出，让 checkOnce 熔断并停止本轮（不要吞掉继续撞墙）
+    if (/\[BLOCKED\]|429/.test(e.message)) throw e;
     return { id: u.id, name: u.name, ok: false, error: e.message };
   }
 }
 
 async function checkOnce() {
   const opts = await getOptions();
+
+  // 熔断冷却期内直接跳过本轮（避免风控未解除时继续撞墙，越锁越死）
+  if (await rlIsBlocked()) {
+    log('熔断冷却中，跳过本轮轮询（雪球风控未解除）');
+    return;
+  }
+
   log('── 开始轮询检查（间隔', opts.intervalMin, '分钟）──');
 
   let users = await getSpecialFollowUsers();
@@ -1022,9 +1103,20 @@ async function checkOnce() {
   const perUser = {};
   let runError = '';
 
-  // 有限并发抓取（默认 3 路），避免串行慢 + 易触发 429；
+  // 串行 + 每用户间隔 1.2~2.2s 抓取：把请求均匀铺开，杜绝并发突发触发雪球 WAF；
   // 各用户独立解析，结果按 users 顺序合并，最后全局按时间线排序。
-  const results = await mapConcurrent(users, 3, u => fetchUserFresh(u, lastIds, initialized));
+  let results;
+  try {
+    results = await mapSerial(users, u => fetchUserFresh(u, lastIds, initialized), 1200, 2200);
+  } catch (e) {
+    if (/\[BLOCKED\]|429/.test(e.message)) {
+      // 熔断已在 fetchJSON 里触发并持久化；这里只需中止本轮，不再处理剩余用户
+      logErr('本轮取数被雪球风控中断：' + e.message);
+      await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now() });
+      return;
+    }
+    throw e;
+  }
   for (const r of results) {
     if (r.ok) {
       perUser[r.id] = { name: r.name, ok: true, parsed: r.parsed };
@@ -1072,12 +1164,15 @@ async function checkOnce() {
   // 每次轮询顺带检查：3 分钟未读完是否该重弹
   await maybeRepopAlert();
 
+  // 本轮完整跑通（未被风控中断）→ 复位退避计数
+  await rlReset();
   log('── 检查完成，本次新帖：', newAll.length, '｜监控', users.length, '人 ──');
 }
 
 // ---------- 定时器 ----------
 function scheduleAlarm(min) {
-  const m = Math.min(60, Math.max(1, Number(min) || 2));
+  // 下限 3 分钟：过高频轮询会被雪球 WAF 判为爬虫触发「访问被阻断」，强制兜底降频
+  const m = Math.min(60, Math.max(3, Number(min) || 5));
   chrome.alarms.clear('poll', () => {
     chrome.alarms.create('poll', { periodInMinutes: m });
   });

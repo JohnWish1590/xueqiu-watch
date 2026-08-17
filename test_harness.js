@@ -30,6 +30,7 @@ let groupsResponse = [
 // 多页成员模拟：只在「特别关注分组不含内联 users」时启用，强制走 members.json 分页路径。
 // 形如 [ 第1页, 第2页, ... ]，每页 { users:[...], maxPage:N }
 let membersPages = null;
+let blockUserTimeline = false;   // 场景13：让 user_timeline 返回雪球 WAF 阻断页
 let user1Posts = [ { id: 101, text: '<p>昨天发的帖</p>' }, { id: 100, text: '更早的帖' } ];
 let user2Posts = [ { id: 50, text: '李四旧帖' } ];
 
@@ -45,6 +46,9 @@ function fetchMockText(url) {
       return JSON.stringify(membersPages[page - 1] || { users: [] });
     }
     return JSON.stringify({ users: [] });
+  }
+  if (blockUserTimeline && url && url.includes('/user_timeline.json')) {
+    return '<html><body>很抱歉，由于您访问的URL有可能对网站造成安全威胁，您的访问被阻断。请求ID：test</body></html>';
   }
   if (url && url.includes('/user_timeline.json')) {
     const m = url.match(/user_id=(\d+)/);
@@ -384,6 +388,30 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
   captured.createCount = 0;
   await sandbox.openAlertWindow();
   assert(captured.createCount === 1, '全部关闭后再触发 → 新建 1 个窗口');
+
+  console.log('=== 场景13：雪球 WAF 阻断页 → 熔断 + 冷却期跳过（防回归：不识别会每轮重撞墙） ===');
+  // 重置熔断状态（内存 + storage）
+  sandbox.rlState = null;
+  store.rateLimit = undefined;
+  blockUserTimeline = true;                       // 让 user_timeline 返回阻断 HTML 页
+  groupsResponse = [ { id: 101, name: '特别关注', special: true, users: [ { id: '1', screen_name: '张三' } ] } ];
+  store.options = { intervalMin: 2, manualUsers: '', soundOn: false };
+  store.initialized = true; store.lastIds = { '1': 0 };
+  notifications = [];
+  await sandbox.checkOnce();                      // 本轮应被风控中断
+  assert(store.rateLimit && store.rateLimit.retryCount >= 1, '阻断页被识别 → 触发熔断（retryCount≥1）');
+  assert(store.rateLimit && store.rateLimit.blockedUntil > Date.now(), '熔断设置冷却期（blockedUntil > now）');
+  assert(/BLOCKED|阻断/.test(store.lastError || ''), '记录风控中断错误（lastError 含 BLOCKED/阻断）');
+  assert(notifications.length === 0, '风控中断时不发通知');
+
+  const lastCheckAfterTrip = store.lastCheck;
+  await sandbox.checkOnce();                      // 冷却期内 → 应直接跳过
+  assert(store.lastCheck === lastCheckAfterTrip, '冷却期内跳过本轮（不更新 lastCheck，不再撞墙）');
+
+  // 复位，避免污染（若后续再加场景）
+  blockUserTimeline = false;
+  sandbox.rlState = null;
+  store.rateLimit = undefined;
 
   console.log('=== 完成 ===');
 })();

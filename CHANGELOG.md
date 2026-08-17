@@ -5,6 +5,18 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.5.4] - 2026-08-17
+
+> 🛡️ **彻底解决雪球 WAF「访问被阻断」（重要）**。根因：雪哨每 `intervalMin`（默认 2 分钟）对特别关注分组里 N 个用户**3 路并发**逐个打 `user_timeline.json`，请求过于密集被雪球 WAF 判为爬虫/CC，返回「您的访问被阻断」HTML 阻断页。原代码不识别阻断页（JSON 解析失败误报「不是 JSON」）、不熔断，导致每轮每个用户重复撞墙，风控越锁越死，且阻断页会污染浏览器里所有雪球标签页。
+
+### 修复
+
+- **识别阻断页 + 熔断**：`looksLikeBlockPage()` 识别 body 含「访问被阻断/安全威胁/被阻断」等特征（含 403/503 + body 检测），抛 `[BLOCKED]` 错误；`fetchJSON` 捕获后触发熔断（`rlTrip`），停止本轮、指数退避（5→10→20→30 分钟），冷却期内 `checkOnce` 直接跳过。
+- **串行化请求**：`mapConcurrent(users, 3)` → `mapSerial(users, 1.2~2.2s 随机间隔)`，把 N 个请求均匀铺开，杜绝并发突发。
+- **降频**：`intervalMin` 默认 2→5 分钟；`scheduleAlarm` 下限 3 分钟，防止手动设过低触发风控。
+- **跨 SW 重启持久化**：熔断状态存 `chrome.storage.local['rateLimit']`，Service Worker 被浏览器杀掉后重启仍保留冷却期，不会重启即再撞墙。
+- **测试**：新增场景 13（阻断页 → 熔断 + 冷却期跳过），断言 61 PASS / 0 FAIL。
+
 ## [1.5.3] - 2026-08-11
 
 > 🐛 **特别关注分组超一页时漏人（严重）**。原 `getSpecialFollowUsers` 取成员只请求 `friendships/groups/members.json` 的**第 1 页**，不翻页。雪球该接口默认每页约 20 人，若「特别关注」分组人数超过一页，靠后的成员会被整体漏掉——表现为「某人在雪球里是特别关注、雪哨却没取到」。新增 `fetchGroupMembersAll(gid)` 按 `page` 分页拉全（每页 20，最多 50 页 ≈ 1000 人，到末页或 `maxPage` 即止）。`test_harness` 新增场景 A（25 人 / 2 页）锁定该回归，断言 56 PASS / 0 FAIL。
