@@ -5,6 +5,17 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.5.6] - 2026-08-21
+
+> 🐛 **修复：Alert 默认 440px 宽度下「黑暗」二字被主题切换控件裁切**。v1.5.5 改主题切换为分段按钮（明亮/黑暗）+ 中间分隔线 + SVG 图标后，header 整体宽度超出默认弹窗宽度，theme-toggle 容器自身 `overflow:hidden` + 圆角把「黑暗」字切掉。
+
+### 修复
+
+- **缩小 header 各元素尺寸**：header `padding` 左右 `14/25 → 12/16`，`gap 10 → 8`，markAll/close 按钮 `padding 3px 10/12 → 3px 9/10`，theme-btn `padding 3px 10 → 3px 7`
+- **缩小 SVG 图标**：`14px → 12px`，`.theme-ico margin-right 3 → 2`
+- **`theme-toggle` flex-shrink 0 → 1**：极窄时它退让而非被父容器裁切
+- **总省约 30px**，440px 默认弹窗宽下 header 完整显示（测试: 61 PASS / 0 FAIL）
+
 ## [1.5.5] - 2026-08-21
 
 > 🎨 **纯 UI 重构（功能零改动）**。按 `雪哨UI优化交接文档-20260821.md` 把 Popup / Options / Alert 三套界面从红色系统一重构为**绿·苔 #4F8A6B 单强调色 + 极简卡片式**，并补齐**暗色主题全套** + 统一**「绿底白哨字」四尺寸图标**。JS 逻辑、数据流、API 调用完全未动；HTML 既有 ID/class 不重命名（仅追加）。

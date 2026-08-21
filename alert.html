@@ -51,11 +51,11 @@
     .hd {
       background: var(--win-bg);
       color: var(--title);
-      padding: 10px 14px 10px 25px;
+      padding: 10px 12px 10px 16px;
       font-size: 13px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-shrink: 0;
       flex-wrap: nowrap;
       border-bottom: 0.5px solid var(--hd-border);
@@ -69,7 +69,7 @@
       border: 0.5px solid var(--btn-p-border);
       color: var(--btn-p-color);
       border-radius: 14px;
-      padding: 3px 10px;
+      padding: 3px 9px;
       cursor: pointer;
       font-size: 11px;
       font-weight: 500;
@@ -77,17 +77,17 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
-    .hd button.btn-g { border-color: var(--btn-g-border); color: var(--btn-g-color); padding: 3px 12px; }
+    .hd button.btn-g { border-color: var(--btn-g-border); color: var(--btn-g-color); padding: 3px 10px; }
     .hd button:hover { opacity: .7; }
     /* 头部右侧弹性占位：把已读全部/关闭/主题切换推到最右 */
     .hd-spacer { flex: 1 1 auto; }
     /* 明亮/黑暗分段按钮：紧贴关闭按钮右侧，靠右对齐 */
-    .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 0; margin-left: 2px; }
-    .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 10px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; }
+    .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 1; margin-left: 2px; }
+    .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 7px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; white-space: nowrap; }
     .hd .theme-toggle .theme-btn + .theme-btn { border-left: 0.5px solid var(--btn-g-border); }   /* 中间分隔线（文档 §4.3） */
     .hd .theme-toggle .theme-btn.active { background: var(--hint-bg); color: var(--btn-p-color); font-weight: 600; }
     .hd .theme-toggle .theme-btn:hover { opacity: .85; }
-    .theme-ico { vertical-align: -2px; margin-right: 3px; }
+    .theme-ico { vertical-align: -2px; margin-right: 2px; }
 
     /* ── 消息列表 ── */
     .list {
@@ -187,8 +187,8 @@
     <button id="markAll">已读全部</button>
     <button id="close" class="btn-g">关闭</button>
     <span class="theme-toggle">
-      <button id="themeLight" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"><path d="M8 1.2v1.8"/><path d="M8 13v1.8"/><path d="M1.2 8h1.8"/><path d="M13 8h1.8"/><path d="M3.05 3.05l1.27 1.27"/><path d="M11.68 11.68l1.27 1.27"/><path d="M3.05 12.95l1.27-1.27"/><path d="M11.68 4.32l1.27-1.27"/></g></svg>明亮</button>
-      <button id="themeDark" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M12.8 9.4A5.2 5.2 0 0 1 6.6 3.2a5.2 5.2 0 1 0 6.2 6.2z" fill="currentColor"/></svg>黑暗</button>
+      <button id="themeLight" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"><path d="M8 1.2v1.8"/><path d="M8 13v1.8"/><path d="M1.2 8h1.8"/><path d="M13 8h1.8"/><path d="M3.05 3.05l1.27 1.27"/><path d="M11.68 11.68l1.27 1.27"/><path d="M3.05 12.95l1.27-1.27"/><path d="M11.68 4.32l1.27-1.27"/></g></svg>明亮</button>
+      <button id="themeDark" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M12.8 9.4A5.2 5.2 0 0 1 6.6 3.2a5.2 5.2 0 1 0 6.2 6.2z" fill="currentColor"/></svg>黑暗</button>
     </span>
   </div>
   <div class="list" id="list"></div>
