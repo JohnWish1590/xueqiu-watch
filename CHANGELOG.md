@@ -5,6 +5,29 @@
 > 版本号单一来源为 `manifest.json` 的 `version` 字段；本文件与之手动同步。
 > 日期格式 `YYYY-MM-DD`；历史版本日期不可考时仅写 `YYYY-MM`（月精度，不编造具体日）。
 
+## [1.5.5] - 2026-08-21
+
+> 🎨 **纯 UI 重构（功能零改动）**。按 `雪哨UI优化交接文档-20260821.md` 把 Popup / Options / Alert 三套界面从红色系统一重构为**绿·苔 #4F8A6B 单强调色 + 极简卡片式**，并补齐**暗色主题全套** + 统一**「绿底白哨字」四尺寸图标**。JS 逻辑、数据流、API 调用完全未动；HTML 既有 ID/class 不重命名（仅追加）。
+
+### 视觉
+
+- **设计 Token 体系**：亮/暗双套 CSS 变量（`--bg/--surface/--divider/--border/--text-primary/--text-body/--text-secondary/--brand/--hint-bg/--console-bg`），所有颜色引用改 `var()`。Popup / Options 跟 `prefers-color-scheme`，Alert 用顶部 ☀/☾ 手动切换。
+- **品牌主色**：红系 (`#F53F3F` / `#e6162d` / `#c0392b`) 与蓝系 (`#1E6FFF` / `#1677ff`) 残留全部清理为 `#4F8A6B` 绿苔。
+- **暗色套件**：Options / Alert / Popup 三页面均补齐 `body.theme-dark` / `@media (prefers-color-scheme: dark)` 分支。
+- **Options 提示条换行**：`.highlight-box` 加 `white-space:normal; word-break:break-word;` + `max-width:520px`，12px 两行排版。
+- **主题切换控件（Alert 顶部）**：`☀/☾` 改 14px SVG 矢量图标（非 emoji），激活态浅绿底 + 品牌绿字，中间加 0.5px 分隔线。
+- **暗色头像**：JS 生成的马卡龙色用 `filter:brightness(.82) saturate(.9)` 统一压暗，避免刺眼。
+- **`.empty` 颜色残留**：用 `!important` 覆盖 alert.js L180 硬编码 `color:#1E6FFF` 蓝色残留。
+
+### 图标
+
+- 新生成 `icon16/32/48/128.png`「绿底白『哨』字」四档（圆角 3/4/6/14，字号 10/20/30/80），`manifest.json` 补 `32` 项。旧 `gen_icons.py` 输出作废。
+
+### 不改的范围（硬约束）
+
+- JS 逻辑（轮询、登录态、企微、日志、诊断、熔断、贴边）全部原样保留。
+- 既有 HTML `id` / `class` 不重命名（仅追加 `console-out` / `btn-secondary` / `btn-mute` / `version-pill` / `hint-safe` / `theme-ico`）。
+
 ## [1.5.4] - 2026-08-17
 
 > 🛡️ **彻底解决雪球 WAF「访问被阻断」（重要）**。根因：雪哨每 `intervalMin`（默认 2 分钟）对特别关注分组里 N 个用户**3 路并发**逐个打 `user_timeline.json`，请求过于密集被雪球 WAF 判为爬虫/CC，返回「您的访问被阻断」HTML 阻断页。原代码不识别阻断页（JSON 解析失败误报「不是 JSON」）、不熔断，导致每轮每个用户重复撞墙，风控越锁越死，且阻断页会污染浏览器里所有雪球标签页。

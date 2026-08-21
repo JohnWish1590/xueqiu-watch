@@ -6,31 +6,33 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --win-bg:#FFFFFF; --win-border:#E5E5E5;
+      --win-bg:#FFFFFF; --win-border:#E5E6EB;
       --hd-border:#EDEDED;
       --title:#1D2129; --subtitle:#86909C;
-      --logo-color:#F53F3F;
-      --btn-p-color:#1E6FFF; --btn-p-border:#1E6FFF;
-      --btn-g-color:#86909C; --btn-g-border:#D9D9D9;
-      --card-bg:#F3F4F6; --card-border:#E6E8EC;
+      --logo-color:#4F8A6B;
+      --btn-p-color:#4F8A6B; --btn-p-border:#4F8A6B;
+      --btn-g-color:#86909C; --btn-g-border:#E5E6EB;
+      --card-bg:#F7F8FA; --card-border:#E5E6EB;
       --name:#1D2129; --summary:#4E5969;
-      --badge:#F53F3F;
-      --footer:#86909C; --footer-border:#F2F2F2;
-      --divider:#F0F0F0;
+      --badge:#4F8A6B;
+      --footer:#86909C; --footer-border:#EDEDED;
+      --divider:#EDEDED;
+      --hint-bg:#EAF1ED;
       --avatar-size:36px;
     }
     body.theme-dark {
-      --win-bg:#1E1E22; --win-border:#2E2E34;
-      --hd-border:#2E2E34;
-      --title:#E8E8EA; --subtitle:#8A8A92;
-      --logo-color:#FF6B6B;
-      --btn-p-color:#7AA2FF; --btn-p-border:#3A3A44;
-      --btn-g-color:#8A8A92; --btn-g-border:#444450;
-      --card-bg:#2A2A30; --card-border:#3A3A42;
-      --name:#E8E8EA; --summary:#8A8A92;
-      --badge:#F53F3F;
-      --footer:#6E6E76; --footer-border:#2E2E34;
-      --divider:#2A2A30;
+      --win-bg:#23262E; --win-border:#2E333D;
+      --hd-border:#2E333D;
+      --title:#F2F3F5; --subtitle:#86909C;
+      --logo-color:#4F8A6B;
+      --btn-p-color:#4F8A6B; --btn-p-border:#2E333D;
+      --btn-g-color:#86909C; --btn-g-border:#2E333D;
+      --card-bg:#2A2F38; --card-border:#2E333D;
+      --name:#F2F3F5; --summary:#C9CDD4;
+      --badge:#4F8A6B;
+      --footer:#86909C; --footer-border:#2E333D;
+      --divider:#2E333D;
+      --hint-bg:#1F2A25;
     }
     body.layout-inbox { --avatar-size:32px; }
 
@@ -82,8 +84,10 @@
     /* 明亮/黑暗分段按钮：紧贴关闭按钮右侧，靠右对齐 */
     .hd .theme-toggle { display: inline-flex; border: 0.5px solid var(--btn-g-border); border-radius: 14px; overflow: hidden; flex-shrink: 0; margin-left: 2px; }
     .hd .theme-toggle .theme-btn { border: none; border-radius: 0; padding: 3px 10px; background: transparent; color: var(--subtitle); font-size: 11px; font-weight: 500; cursor: pointer; }
-    .hd .theme-toggle .theme-btn.active { background: var(--btn-p-color); color: #fff; }
+    .hd .theme-toggle .theme-btn + .theme-btn { border-left: 0.5px solid var(--btn-g-border); }   /* 中间分隔线（文档 §4.3） */
+    .hd .theme-toggle .theme-btn.active { background: var(--hint-bg); color: var(--btn-p-color); font-weight: 600; }
     .hd .theme-toggle .theme-btn:hover { opacity: .85; }
+    .theme-ico { vertical-align: -2px; margin-right: 3px; }
 
     /* ── 消息列表 ── */
     .list {
@@ -114,7 +118,7 @@
       margin-bottom: 10px;
       overflow: hidden;
     }
-    body:not(.layout-inbox) .row:hover { border-color: #D6E4FF; }
+    body:not(.layout-inbox) .row:hover { border-color: #A8C7B5; }
     body.layout-inbox .row { padding: 11px 0; border-bottom: 0.5px solid var(--divider); }
     body.layout-inbox .row:last-child { border-bottom: none; }
     body.layout-inbox .row:hover { background: rgba(128,128,128,.05); }
@@ -138,6 +142,8 @@
       font-size: 15px; font-weight: 500; flex-shrink: 0;
     }
     body.layout-inbox .avatar { border-radius: 8px; }
+    /* 暗色下头像底色压暗（设计稿用深蓝/深绿/深粉；JS 生成的马卡龙色用 filter 统一压暗避免刺眼） */
+    body.theme-dark .avatar { filter: brightness(0.82) saturate(0.9); }
 
     /* ── 内容区 ── */
     .body { flex: 1; min-width: 0; }
@@ -153,9 +159,11 @@
 
     /* ── 空态 ── */
     .empty {
-      color: var(--subtitle); font-size: 13px; text-align: center; padding: 40px 16px;
+      color: var(--badge); font-size: 13px; text-align: center; padding: 40px 16px;
       flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
     }
+    /* 覆盖 alert.js L180 硬编码的 color:#1E6FFF（"已全部标记为已读" 蓝色残留 → 品牌绿） */
+    .empty { color: var(--badge) !important; }
 
     /* ── 底部提示栏（左对齐）── */
     .ft {
@@ -179,8 +187,8 @@
     <button id="markAll">已读全部</button>
     <button id="close" class="btn-g">关闭</button>
     <span class="theme-toggle">
-      <button id="themeLight" class="theme-btn">明亮</button>
-      <button id="themeDark" class="theme-btn">黑暗</button>
+      <button id="themeLight" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"><path d="M8 1.2v1.8"/><path d="M8 13v1.8"/><path d="M1.2 8h1.8"/><path d="M13 8h1.8"/><path d="M3.05 3.05l1.27 1.27"/><path d="M11.68 11.68l1.27 1.27"/><path d="M3.05 12.95l1.27-1.27"/><path d="M11.68 4.32l1.27-1.27"/></g></svg>明亮</button>
+      <button id="themeDark" class="theme-btn"><svg class="theme-ico" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M12.8 9.4A5.2 5.2 0 0 1 6.6 3.2a5.2 5.2 0 1 0 6.2 6.2z" fill="currentColor"/></svg>黑暗</button>
     </span>
   </div>
   <div class="list" id="list"></div>

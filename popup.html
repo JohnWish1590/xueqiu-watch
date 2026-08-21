@@ -3,32 +3,82 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 300px; font-family: -apple-system, "Microsoft YaHei", sans-serif; padding: 14px; margin: 0; color: #222; }
-    h2 { font-size: 15px; margin: 0 0 10px; }
-    .row { font-size: 12px; color: #555; margin: 4px 0; }
-    .row b { color: #111; }
-    button { width: 100%; padding: 8px; margin-top: 10px; border: none; border-radius: 6px;
-             background: #e6162d; color: #fff; font-size: 13px; cursor: pointer; }
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #FFFFFF;
+      --surface: #F7F8FA;
+      --divider: #EDEDED;
+      --border: #E5E6EB;
+      --text-primary: #1D2129;
+      --text-body: #4E5969;
+      --text-secondary: #86909C;
+      --brand: #4F8A6B;
+      --brand-contrast: #FFFFFF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #23262E;
+        --surface: #272E3B;
+        --surface-2: #2A2F38;
+        --divider: #2E333D;
+        --border: #2E333D;
+        --text-primary: #F2F3F5;
+        --text-body: #C9CDD4;
+        --text-secondary: #86909C;
+        --brand: #4F8A6B;
+        --brand-contrast: #FFFFFF;
+      }
+    }
+    body {
+      width: 300px;
+      font-family: "Microsoft YaHei", -apple-system, system-ui, sans-serif;
+      padding: 14px;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text-primary);
+    }
+    h2 { font-size: 15px; margin: 0 0 10px; color: var(--text-primary); font-weight: 600; }
+    .row { font-size: 12px; color: var(--text-body); margin: 4px 0; }
+    .row b { color: var(--text-primary); font-weight: 600; }
+    #unread { color: var(--brand); font-weight: 600; }
+    button {
+      width: 100%; padding: 9px; margin-top: 10px; border: 1px solid var(--brand);
+      border-radius: 8px; background: var(--brand); color: var(--brand-contrast);
+      font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+      transition: opacity .15s;
+    }
     button:active { opacity: .85; }
-    .sep { height: 1px; background: #eee; margin: 10px 0; }
-    .post { font-size: 12px; padding: 6px 8px; background: #fafafa; border-radius: 6px; margin: 6px 0; }
-    .post .name { color: #e6162d; font-weight: 600; }
-    .post .t { color: #888; font-size: 11px; }
-    .post .txt { color: #333; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    .empty { font-size: 12px; color: #999; }
-    a { color: #e6162d; font-size: 12px; text-decoration: none; }
+    button.secondary {
+      background: var(--bg); color: var(--brand);
+    }
+    .sep { height: 1px; background: var(--divider); margin: 10px 0; }
+    .post {
+      font-size: 12px; padding: 6px 8px;
+      background: var(--surface); border: 1px solid var(--divider); border-radius: 8px;
+      margin: 6px 0;
+    }
+    .post .name { color: var(--brand); font-weight: 600; }
+    .post .t { color: var(--text-secondary); font-size: 11px; }
+    .post .txt {
+      color: var(--text-body); margin-top: 2px;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .empty { font-size: 12px; color: var(--text-secondary); }
+    a { color: var(--brand); font-size: 12px; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h2>🔥 雪哨（xueqiu-watch）</h2>
+  <h2>雪哨</h2>
   <div class="row">监控博主：<b id="cnt">—</b> 人</div>
   <div class="row">上次运行：<b id="last">—</b></div>
-  <div class="row">未读新帖：<b id="unread" style="color:#1E6FFF;">0</b> 条</div>
+  <div class="row">未读新帖：<b id="unread">0</b> 条</div>
   <div class="row" id="errrow" style="display:none;color:#c00;margin-top:4px;">⚠️ 上次检查出错：<span id="err"></span></div>
   <div class="row" id="diag" style="font-size:11px;color:#777;margin-top:4px;"></div>
   <div class="sep"></div>
   <div id="recent"></div>
-  <button id="open-alert" style="background:#1E6FFF;">🔔 唤出提醒窗口</button>
+  <button id="open-alert" class="secondary">🔔 唤出提醒窗口</button>
   <button id="check">立即检查一次</button>
   <div class="sep"></div>
   <a href="#" id="options">⚙️ 设置（轮询间隔 / 兜底名单）</a>

@@ -4,67 +4,156 @@
   <meta charset="UTF-8">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, "Microsoft YaHei", sans-serif; max-width: 600px; margin: 24px auto; padding: 0 16px; color: #222; }
-    h2 { font-size: 18px; margin-bottom: 2px; }
-    .section { border: 1px solid #e8e8e8; border-radius: 10px; padding: 16px 20px; margin: 14px 0; background: #fafafa; }
-    .section h3 { margin: 0 0 10px; font-size: 15px; color: #333; }
+    :root {
+      --bg: #FFFFFF;
+      --surface: #F7F8FA;
+      --surface-2: #FFFFFF;
+      --divider: #EDEDED;
+      --border: #E5E6EB;
+      --text-primary: #1D2129;
+      --text-body: #4E5969;
+      --text-secondary: #86909C;
+      --text-placeholder: #C9CDD4;
+      --brand: #4F8A6B;
+      --brand-contrast: #FFFFFF;
+      --hint-bg: #EAF1ED;
+      --console-bg: #1E1E1E;
+      --console-text: #D4D4D4;
+      --ok-bg: #EAF1ED;
+      --ok-text: #2C6B4A;
+      --err-bg: #FBECEC;
+      --err-text: #B83232;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #23262E;
+        --surface: #272E3B;
+        --surface-2: #2A2F38;
+        --divider: #2E333D;
+        --border: #2E333D;
+        --text-primary: #F2F3F5;
+        --text-body: #C9CDD4;
+        --text-secondary: #86909C;
+        --text-placeholder: #6B7280;
+        --brand: #4F8A6B;
+        --brand-contrast: #FFFFFF;
+        --hint-bg: #1F2A25;
+        --console-bg: #1E1E1E;
+        --console-text: #D4D4D4;
+        --ok-bg: #1F2A25;
+        --ok-text: #9BCFB4;
+        --err-bg: #2D1E1E;
+        --err-text: #E08585;
+      }
+    }
+    body {
+      font-family: "Microsoft YaHei", -apple-system, system-ui, sans-serif;
+      max-width: 600px; margin: 24px auto; padding: 0 16px;
+      background: var(--bg);
+      color: var(--text-primary);
+    }
+    h2 {
+      font-size: 18px; margin-bottom: 14px; font-weight: 600;
+      color: var(--text-primary);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .version-pill {
+      font-size: 11px; font-weight: 500; padding: 2px 9px;
+      background: var(--surface); color: var(--text-body);
+      border: 1px solid var(--border); border-radius: 999px;
+    }
+    .section {
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 20px; margin: 14px 0;
+      background: var(--surface);
+    }
+    .section h3 { margin: 0 0 10px; font-size: 15px; color: var(--text-primary); font-weight: 600; }
 
-    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: #444; }
-    input[type=number] { width: 80px; padding: 6px; font-size: 14px; border: 1px solid #ddd; border-radius: 5px; }
-    textarea { width: 100%; height: 70px; padding: 8px; font-size: 12.5px; box-sizing: border-box;
-               font-family: monospace; border: 1px solid #ddd; border-radius: 5px; resize: vertical; }
-    .hint { font-size: 12px; color: #999; margin-top: 4px; line-height: 1.55; }
-    .hint code { background: #f0f0f0; padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #333; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: var(--text-body); }
+    input[type=number], input[type=text], select, textarea {
+      width: 100%; padding: 7px 9px; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface-2); color: var(--text-primary);
+      font-family: inherit;
+    }
+    input[type=number] { width: 80px; }
+    textarea { height: 70px; font-size: 12.5px; font-family: monospace; resize: vertical; }
+
+    .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.6; }
+    .hint code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: var(--text-body); border: 1px solid var(--border); }
+    .hint-safe { color: var(--brand); }   /* 企微 Secret 安全提示：品牌绿 */
 
     .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
     .btn {
-      padding: 7px 18px; border: none; border-radius: 6px; background: #e6162d; color: #fff;
-      font-size: 13px; cursor: pointer; transition: opacity .15s; white-space: nowrap;
+      padding: 7px 18px; border: 1px solid var(--brand); border-radius: 8px;
+      background: var(--brand); color: var(--brand-contrast);
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .15s;
+      white-space: nowrap; font-family: inherit;
     }
     .btn:active, .btn:hover { opacity: .85; }
-    .btn.btn-sm { padding: 5px 14px; font-size: 12px; background: #555; }
-    .btn.btn-blue { background: #1677ff; }
-    .btn:disabled { background: #bbb; cursor: not-allowed; opacity: .65; }
+    .btn:disabled { background: var(--text-placeholder); border-color: var(--text-placeholder); cursor: not-allowed; opacity: .65; }
+    .btn.btn-sm { padding: 5px 14px; font-size: 12px; }
+    .btn.btn-secondary { background: var(--surface-2); color: var(--text-primary); border-color: var(--border); }
+    .btn.btn-mute { background: var(--bg); color: var(--text-secondary); border-color: var(--border); }
 
     /* 登录状态 */
-    #login-status { font-size: 13px; margin-top: 8px; padding: 8px 12px; border-radius: 6px; display: none; }
-    #login-status.ok { background: #eafff0; color: #1a8a3c; display: block; }
-    #login-status.err { background: #fff0ef; color: #c00; display: block; }
+    #login-status { font-size: 13px; margin-top: 8px; padding: 8px 12px; border-radius: 8px; display: none; }
+    #login-status.ok { background: var(--ok-bg); color: var(--ok-text); display: block; }
+    #login-status.err { background: var(--err-bg); color: var(--err-text); display: block; }
 
     /* 特别关注列表 */
     #group-list { margin-top: 10px; }
-    .user-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+    .user-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--divider); font-size: 13px; }
     .user-item:last-child { border-bottom: none; }
-    .user-item input[type=checkbox] { width: 17px; height: 17px; accent-color: #e6162d; cursor: pointer; }
-    .user-name { font-weight: 500; color: #222; }
-    .user-id { color: #aaa; font-size: 11.5px; font-family: monospace; }
-    .group-empty { color: #999; font-size: 12.5px; padding: 12px 0; text-align: center; }
-    .select-all { font-size: 12px; color: #666; margin-top: 4px; cursor: pointer; user-select: none; }
+    .user-item input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+    .user-name { font-weight: 500; color: var(--text-primary); }
+    .user-id { color: var(--text-secondary); font-size: 11.5px; font-family: monospace; }
+    .group-empty { color: var(--text-secondary); font-size: 12.5px; padding: 12px 0; text-align: center; }
+    .select-all { font-size: 12px; color: var(--text-body); margin-top: 4px; cursor: pointer; user-select: none; }
     .select-all input { vertical-align: middle; margin-right: 3px; }
 
-    #status { font-size: 13px; color: #1a8a3c; margin-left: 10px; font-weight: 600; }
-    .ft-note { font-size: 11.5px; color: #bbb; margin-top: 22px; line-height: 1.5; }
+    #status { font-size: 13px; color: var(--ok-text); margin-left: 10px; font-weight: 600; }
+    .ft-note { font-size: 11.5px; color: var(--text-secondary); margin-top: 22px; line-height: 1.5; }
 
     /* 加载中 */
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd;
-      border-top-color: #e6162d; border-radius: 50%; animation: spin .6s linear infinite;
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--divider);
+      border-top-color: var(--brand); border-radius: 50%; animation: spin .6s linear infinite;
       vertical-align: -2px; margin-left: 6px; }
     @keyframes spin { to{ transform: rotate(360deg); } }
 
-    /* 高亮提示 */
-    .highlight-box { background: #eef6ff; border: 1px solid #b3d8ff; border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 13px; color: #1a56a8; line-height: 1.55; }
+    /* 推荐提示条（重点：自动换行 + 宽度约束 + 字号12，两行排版） */
+    .highlight-box {
+      background: var(--hint-bg); border: 1px solid var(--brand); border-radius: 8px;
+      padding: 10px 14px; margin: 10px 0; font-size: 12px; color: var(--text-primary);
+      line-height: 1.65;
+      max-width: 520px;
+      white-space: normal; word-break: break-word; overflow-wrap: break-word;
+    }
+    .highlight-box b { color: var(--brand); }
+    .highlight-box a { color: var(--brand); }
+
+    /* 诊断/日志输出（黑底跨主题一致） */
+    pre.console-out {
+      white-space: pre-wrap; background: var(--console-bg); color: var(--console-text);
+      padding: 12px; border-radius: 8px; font-size: 11.5px; line-height: 1.5;
+      max-height: 360px; overflow: auto; display: none; margin-top: 10px;
+      font-family: monospace;
+    }
+
+    /* details（高级 Cookie 折叠） */
+    details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
+    details summary:hover { color: var(--text-primary); }
   </style>
 </head>
 <body>
-  <h2>⚙️ 雪哨 · 设置</h2>
+  <h2>雪哨 · 设置 <span class="version-pill" id="hdr-ver">v1.5.5</span></h2>
 
   <!-- ===== 第一步：登录检测 ===== -->
   <div class="section">
     <h3>① 登录状态</h3>
 
     <div class="highlight-box">
-      <b>推荐方式（零配置）：</b>确保 Chrome 已打开并登录了 <a href="https://xueqiu.com" target="_blank">xueqiu.com</a>，
-      然后直接点下方「自动检测」按钮。扩展会通过你已打开的雪球页面自动获取登录态，<b>不需要复制任何 Cookie</b>。
+      <b>推荐方式（零配置）：</b>确保 Chrome 已打开并登录了 <a href="https://xueqiu.com" target="_blank">xueqiu.com</a>，然后直接点下方「自动检测」按钮。扩展会通过你已打开的雪球页面自动获取登录态，<b>不需要复制任何 Cookie</b>。
     </div>
 
     <div class="btn-row">
@@ -74,7 +163,7 @@
     <div id="login-status"></div>
 
     <details style="margin-top:10px;">
-      <summary style="cursor:pointer;font-size:12px;color:#888;">⚙️ 高级：手动粘贴 Cookie（一般不需要）</summary>
+      <summary>⚙️ 高级：手动粘贴 Cookie（一般不需要）</summary>
       <div style="margin-top:6px;">
         <textarea id="cookie" placeholder="仅在自动检测失败时使用&#10;F12 → Network → 任选请求 → 复制 Cookie: 整行"></textarea>
         <div class="hint">粘贴后点上方「自动检测」即可，会优先使用你粘贴的 Cookie。</div>
@@ -100,12 +189,12 @@
   <div class="section">
     <h3>外观设置（弹窗样式）</h3>
     <label>弹窗布局</label>
-    <select id="layout" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;">
+    <select id="layout">
       <option value="card">紧凑精准（卡片式）</option>
       <option value="inbox">收件箱式（分隔线行）</option>
     </select>
     <label>弹窗主题</label>
-    <select id="theme" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;">
+    <select id="theme">
       <option value="light">明亮</option>
       <option value="dark">黑暗</option>
     </select>
@@ -118,7 +207,7 @@
 
     <label>轮询间隔（分钟）</label>
     <input type="number" id="interval" min="1" max="60" step="1" value="2">
-    <div class="hint">建议 1–10 分钟，默认 2 分钟。</div>
+    <div class="hint">建议 1–10 分钟，默认 2 分钟（已设下限 3 分钟以避免触发雪球风控）。</div>
 
     <label>声音提示</label>
     <div style="font-size:13px;">
@@ -146,18 +235,18 @@
     </div>
 
     <label>CorpID（企业 ID）</label>
-    <input type="text" id="wecom-corpid" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;">
+    <input type="text" id="wecom-corpid">
 
     <label>Secret（应用密钥）</label>
-    <input type="text" id="wecom-secret" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;">
+    <input type="text" id="wecom-secret">
 
     <label>AgentID（应用 ID）</label>
-    <input type="text" id="wecom-agentid" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;">
+    <input type="text" id="wecom-agentid">
 
     <label>接收人 UserID（留空 = 应用内所有人）</label>
-    <input type="text" id="wecom-touser" style="width:100%;padding:6px;font-size:13px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box;" placeholder="如 zhangsan，多个用 | 分隔">
+    <input type="text" id="wecom-touser" placeholder="如 zhangsan，多个用 | 分隔">
 
-    <div class="hint" style="color:#c0392b;">⚠️ Secret 属于敏感凭证，仅保存在你本机浏览器，不会上传任何服务器。</div>
+    <div class="hint hint-safe">⚠️ Secret 属于敏感凭证，仅保存在你本机浏览器，不会上传任何服务器。</div>
 
     <div class="btn-row">
       <button id="btn-wecom-test" class="btn btn-sm btn-blue">📤 测试企微推送</button>
@@ -170,12 +259,12 @@
     <h3>🔧 诊断（检测不到登录时用）</h3>
     <div class="btn-row">
       <button id="btn-diag" class="btn btn-sm">🔧 一键诊断</button>
-      <button id="btn-copy-diag" class="btn btn-sm" style="background:#555;">📋 复制报告</button>
-      <button id="btn-test" class="btn btn-sm" style="background:#e6162d;">📢 发送测试提醒</button>
+      <button id="btn-copy-diag" class="btn btn-sm btn-secondary">📋 复制报告</button>
+      <button id="btn-test" class="btn btn-sm">📢 发送测试提醒</button>
       <span id="diag-spinner"></span>
     </div>
     <div class="hint">点「一键诊断」会逐条测试登录态获取的每一环（标签页 / content script / Cookie / 完整请求），把结果显示在下方。点「复制报告」把内容发给我即可定位问题。</div>
-    <pre id="diag-out" style="white-space:pre-wrap;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:11.5px;line-height:1.5;max-height:360px;overflow:auto;display:none;margin-top:10px;"></pre>
+    <pre id="diag-out" class="console-out"></pre>
   </div>
 
   <!-- ===== 运行日志 ===== -->
@@ -183,24 +272,24 @@
     <h3>📜 运行日志（出问题时发我）</h3>
     <div class="btn-row">
       <button id="btn-log-refresh" class="btn btn-sm">🔄 刷新</button>
-      <button id="btn-log-copy" class="btn btn-sm" style="background:#555;">📋 复制日志</button>
-      <button id="btn-log-download" class="btn btn-sm" style="background:#555;">💾 下载 .txt</button>
-      <button id="btn-log-clear" class="btn btn-sm" style="background:#aaa;">🗑 清空</button>
-      <span id="log-count" style="font-size:12px;color:#999;"></span>
+      <button id="btn-log-copy" class="btn btn-sm btn-secondary">📋 复制日志</button>
+      <button id="btn-log-download" class="btn btn-sm btn-secondary">💾 下载 .txt</button>
+      <button id="btn-log-clear" class="btn btn-sm btn-mute">🗑 清空</button>
+      <span id="log-count" style="font-size:12px;color:var(--text-secondary);"></span>
     </div>
     <div class="hint">扩展后台运行时会自动记录每一步：轮询触发、取数走了哪条路径、弹窗定位坐标、每条错误。<b>错误日志永久保留（不会被轮询冲刷掉），点「📋 复制日志」后即清空</b>。复制或下载后发我，我能直接定位问题。日志只存在你本机。</div>
-    <pre id="log-out" style="white-space:pre-wrap;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:11.5px;line-height:1.5;max-height:360px;overflow:auto;display:none;margin-top:10px;"></pre>
+    <pre id="log-out" class="console-out"></pre>
   </div>
 
   <!-- ===== 关于 / 版权 / 联系 ===== -->
   <div class="section">
     <h3>ℹ️ 关于与版权</h3>
-    <div style="font-size:13px;line-height:1.75;">
+    <div style="font-size:13px;line-height:1.8;">
       <div><b>名称：</b>雪哨（xueqiu-watch）</div>
       <div><b>版本：</b><span id="about-ver">—</span></div>
-      <div><b>作者：</b><a href="https://weibo.com/u/7708742647" target="_blank" rel="noopener">微博@下一站澳门</a></div>
-      <div><b>源码：</b>GitHub：<a href="https://github.com/JohnWish1590/xueqiu-watch" target="_blank" rel="noopener">https://github.com/JohnWish1590/xueqiu-watch</a></div>
-      <div style="margin-top:10px;color:#888;font-size:12px;">
+      <div><b>作者：</b><a href="https://weibo.com/u/7708742647" target="_blank" rel="noopener" style="color:var(--brand);">微博@下一站澳门</a></div>
+      <div><b>源码：</b>GitHub：<a href="https://github.com/JohnWish1590/xueqiu-watch" target="_blank" rel="noopener" style="color:var(--brand);">https://github.com/JohnWish1590/xueqiu-watch</a></div>
+      <div style="margin-top:10px;color:var(--text-secondary);font-size:12px;">
         © 2026 保留所有权利。<br>
         本扩展仅供个人学习使用，与雪球（xueqiu.com）官方无任何隶属或合作关系。<br>
         雪球及相关标识归其各自权利人所有。
