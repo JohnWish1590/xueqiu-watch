@@ -1134,6 +1134,8 @@ async function checkOnce() {
   const newAll = [];
   const perUser = {};
   let runError = '';
+  // 轮转深扫进度（跨轮持久化）：每轮直查特别关注里 DEEP_PER_CYCLE 人，保证不漏人
+  const deepScanState = stored.deepScan || { idx: 0 };
 
   // ── 特别关注：一次合并信息流（1~2 个请求）覆盖全部成员 ──
   if (special && special.length) {
@@ -1163,6 +1165,36 @@ async function checkOnce() {
       }
       runError = runError || e.message;
       logWarn('合并信息流异常（兜底忽略，下轮重试）：', e.message);
+    }
+  }
+
+  // ── 兜底深扫：合并流只抓最新 2 页，特别关注帖可能被大量关注对象的新帖挤出视野而漏抓。
+  //    用「轮转逐人直查 user_timeline」兜底：每轮只查 DEEP_PER_CYCLE 人、串行铺开，
+  //    30 人分组下每人约每 75 分钟被直查一次；请求量极小（≈2/轮）不会触发 WAF。
+  //    合并流负责"即时"，深扫负责"绝不漏"，两者互补。
+  if (special && special.length) {
+    const DEEP_PER_CYCLE = 2;
+    for (let k = 0; k < DEEP_PER_CYCLE; k++) {
+      const u = special[deepScanState.idx % special.length];
+      deepScanState.idx = (deepScanState.idx + 1) % special.length;
+      try {
+        const r = await fetchUserFresh(u, lastIds, initialized);
+        if (r.ok) {
+          perUser[r.id] = { name: r.name, ok: true, parsed: (perUser[r.id]?.parsed || 0) + (r.parsed || 0) };
+          if (r.maxId !== undefined) lastIds[r.id] = r.maxId;
+          if (r.mapped) newAll.push(...r.mapped);
+        } else {
+          perUser[r.id] = { name: r.name, ok: false, error: r.error };
+          runError = runError || r.error;
+        }
+      } catch (e) {
+        if (/\[BLOCKED\]|429/.test(e.message)) {
+          logErr('深扫取数被雪球风控中断：' + e.message);
+          await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now(), deepScan: deepScanState });
+          return;
+        }
+        runError = runError || e.message;
+      }
     }
   }
 
@@ -1202,6 +1234,7 @@ async function checkOnce() {
     trackedCount: users.length,
     perUser,
     lastError: runError,
+    deepScan: deepScanState,
   });
 
   // 每用户抓取结果摘要（便于诊断"某人不提醒"）
