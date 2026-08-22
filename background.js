@@ -1075,10 +1075,41 @@ async function fetchUserFresh(u, lastIds, initialized) {
   }
 }
 
+// ---------- 合并信息流取数（WAF 根治：把 N 个请求压成 1~2 个） ----------
+// 旧方案对「特别关注」分组里每个人各打一次 user_timeline.json（30 人 = 每轮 30 请求，
+// 即便串行铺开，雪球 WAF 仍按「同域名短时间高频 API」判爬虫 → 返回「访问被阻断」）。
+// 新方案：拉一次 home_timeline（你关注的人发的帖都在，特别关注是其子集），本地按
+// user_id 过滤出特别关注的新帖。请求量降 ~30 倍，从源头让 WAF 触发不了。
+// 旧熔断逻辑（rlTrip/rlReset）降级为兜底安全网，正常情况基本用不到。
+async function getMergedTimeline(pages = 2) {
+  const all = [];
+  for (let p = 1; p <= pages; p++) {
+    // 同 user_timeline，先试 v4 再试旧版，任一拿到即止（避免某路径 404 取空）
+    const variants = [
+      `${XQ_BASE}/v4/statuses/home_timeline.json?page=${p}&count=20`,
+      `${XQ_BASE}/statuses/home_timeline.json?page=${p}&count=20`,
+    ];
+    let items = [];
+    for (const url of variants) {
+      try {
+        const data = await fetchJSON(url);
+        items = extractStatuses(data);
+        if (items.length) break;
+      } catch (e) {
+        if (/\[BLOCKED\]|429/.test(e.message)) throw e; // 风控直接上抛，触发熔断
+        // 其他（如该 variant 异常）→ 试下一个
+      }
+    }
+    if (!items.length) break;            // 两个 variant 都没拿到 → 末页/异常
+    all.push(...items);
+  }
+  return all;
+}
+
 async function checkOnce() {
   const opts = await getOptions();
 
-  // 熔断冷却期内直接跳过本轮（避免风控未解除时继续撞墙，越锁越死）
+  // 熔断冷却期内直接跳过本轮（兜底安全网，正常情况不会触发）
   if (await rlIsBlocked()) {
     log('熔断冷却中，跳过本轮轮询（雪球风控未解除）');
     return;
@@ -1086,10 +1117,11 @@ async function checkOnce() {
 
   log('── 开始轮询检查（间隔', opts.intervalMin, '分钟）──');
 
-  let users = await getSpecialFollowUsers();
-  if (!users || !users.length) {
-    users = parseManualUsers(opts.manualUsers); // 兜底：手动名单
-  }
+  // 主监控源 = 特别关注分组；为空才回退手动名单
+  const special = await getSpecialFollowUsers();
+  const manual = parseManualUsers(opts.manualUsers);
+  const users = (special && special.length) ? special : manual;
+
   if (!users || !users.length) {
     log('没有可监控的用户（特别关注为空且未配置手动名单）');
     await chrome.storage.local.set({ lastCheck: Date.now(), trackedCount: 0 });
@@ -1103,30 +1135,62 @@ async function checkOnce() {
   const perUser = {};
   let runError = '';
 
-  // 串行 + 每用户间隔 1.2~2.2s 抓取：把请求均匀铺开，杜绝并发突发触发雪球 WAF；
-  // 各用户独立解析，结果按 users 顺序合并，最后全局按时间线排序。
-  let results;
-  try {
-    results = await mapSerial(users, u => fetchUserFresh(u, lastIds, initialized), 1200, 2200);
-  } catch (e) {
-    if (/\[BLOCKED\]|429/.test(e.message)) {
-      // 熔断已在 fetchJSON 里触发并持久化；这里只需中止本轮，不再处理剩余用户
-      logErr('本轮取数被雪球风控中断：' + e.message);
-      await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now() });
-      return;
+  // ── 特别关注：一次合并信息流（1~2 个请求）覆盖全部成员 ──
+  if (special && special.length) {
+    try {
+      const feed = await getMergedTimeline(2);
+      const idSet = new Set(special.map(u => String(u.id)));
+      let seen = 0;
+      for (const post of feed) {
+        const uid = (post.user && String(post.user.id)) || String(post.user_id || '');
+        if (!uid || !idSet.has(uid)) continue;
+        const id = Number(post.id);
+        const u = special.find(x => String(x.id) === uid);
+        const localMax = Number(lastIds[uid] || 0);
+        if (id > localMax) {
+          perUser[uid] = { name: (u && u.name) || '', ok: true, parsed: (perUser[uid]?.parsed || 0) + 1 };
+          if (initialized) newAll.push({ ...post, _name: (u && u.name) || '', _id: uid });
+          lastIds[uid] = Math.max(localMax, id);
+        }
+        seen++;
+      }
+      log('合并信息流取到', feed.length, '条，其中特别关注', seen, '条');
+    } catch (e) {
+      if (/\[BLOCKED\]|429/.test(e.message)) {
+        logErr('合并信息流被雪球风控中断：' + e.message);
+        await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now() });
+        return;
+      }
+      runError = runError || e.message;
+      logWarn('合并信息流异常（兜底忽略，下轮重试）：', e.message);
     }
-    throw e;
   }
-  for (const r of results) {
-    if (r.ok) {
-      perUser[r.id] = { name: r.name, ok: true, parsed: r.parsed };
-      if (r.maxId !== undefined) lastIds[r.id] = r.maxId;
-      if (r.mapped) newAll.push(...r.mapped);
-    } else {
-      perUser[r.id] = { name: r.name, ok: false, error: r.error };
-      runError = runError || r.error;
+
+  // ── 手动名单里不在特别关注分组内的用户（罕见）：逐人补抓，请求少、串行铺开 ──
+  const manualOnly = manual.filter(m => !(special && special.some(s => String(s.id) === String(m.id))));
+  if (manualOnly.length) {
+    try {
+      const results = await mapSerial(manualOnly, u => fetchUserFresh(u, lastIds, initialized), 1200, 2200);
+      for (const r of results) {
+        if (r.ok) {
+          perUser[r.id] = { name: r.name, ok: true, parsed: r.parsed };
+          if (r.maxId !== undefined) lastIds[r.id] = r.maxId;
+          if (r.mapped) newAll.push(...r.mapped);
+        } else {
+          perUser[r.id] = { name: r.name, ok: false, error: r.error };
+          runError = runError || r.error;
+        }
+      }
+    } catch (e) {
+      if (/\[BLOCKED\]|429/.test(e.message)) {
+        logErr('手动名单取数被雪球风控中断：' + e.message);
+        await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now() });
+        return;
+      }
+      throw e;
     }
   }
+
   // 全局按帖子 id 降序：避免跨用户按遍历顺序而非真实时间线排列
   newAll.sort((a, b) => Number(b.id) - Number(a.id));
 

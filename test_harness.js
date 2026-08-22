@@ -47,8 +47,17 @@ function fetchMockText(url) {
     }
     return JSON.stringify({ users: [] });
   }
-  if (blockUserTimeline && url && url.includes('/user_timeline.json')) {
+  if (blockUserTimeline && url && (url.includes('/user_timeline.json') || url.includes('/home_timeline.json'))) {
     return '<html><body>很抱歉，由于您访问的URL有可能对网站造成安全威胁，您的访问被阻断。请求ID：test</body></html>';
+  }
+  // 合并信息流（v1.5.7 新取数路径）：一次返回关注流里张三+李四的帖，本地按 id 过滤
+  // 真实雪球帖子带 user.id 字段，这里在桩边界补上（与真实接口行为一致）
+  if (url && url.includes('/home_timeline.json')) {
+    const mixed = [
+      ...user1Posts.map(p => ({ ...p, user: { id: '1' } })),
+      ...user2Posts.map(p => ({ ...p, user: { id: '2' } })),
+    ];
+    return JSON.stringify({ statuses: mixed });
   }
   if (url && url.includes('/user_timeline.json')) {
     const m = url.match(/user_id=(\d+)/);
@@ -72,6 +81,7 @@ async function fetchMock(url) {
     return jsonResp({});
   }
   if (url.includes('/friendships/groups.json')) return jsonResp(groupsResponse);
+  if (url.includes('/home_timeline.json')) return jsonResp({ statuses: [ ...user1Posts.map(p => ({ ...p, user: { id: '1' } })), ...user2Posts.map(p => ({ ...p, user: { id: '2' } })) ] });
   if (url.includes('/user_timeline.json')) {
     const m = url.match(/user_id=(\d+)/);
     const uid = m && m[1];
