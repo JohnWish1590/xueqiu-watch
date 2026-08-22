@@ -206,16 +206,13 @@
     <h3>③ 参数设置</h3>
 
     <label>轮询间隔（分钟）</label>
-    <input type="number" id="interval" min="1" max="60" step="1" value="2">
-    <div class="hint">建议 1–10 分钟，默认 2 分钟（已设下限 3 分钟以避免触发雪球风控）。</div>
+    <input type="number" id="interval" min="1" max="60" step="1" value="5">
+    <div class="hint">建议 1–10 分钟，默认 5 分钟（已设下限 3 分钟以避免触发雪球风控）。</div>
 
     <label>声音提示</label>
     <div style="font-size:13px;">
       <label style="display:inline;font-weight:400;margin:0;"><input type="checkbox" id="sound"> 新帖时播放提示音</label>
     </div>
-
-    <label>手动补充名单（可选）</label>
-    <textarea id="manual" placeholder="额外想监控的 user_id，逗号或换行分隔"></textarea>
 
     <div style="margin-top:16px;">
       <button id="save" class="btn">💾 保存所有设置</button>

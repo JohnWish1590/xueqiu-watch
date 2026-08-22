@@ -86,14 +86,20 @@ async function loadGroup() {
     groupUsers = Array.isArray(res.users) ? res.users : [];
 
     if (!groupUsers.length) {
-      listEl.innerHTML = '<div class="group-empty">⚠️ 未找到「特别关注」分组或该分组为空。请使用下方手动名单补充。</div>';
+      listEl.innerHTML = '<div class="group-empty">⚠️ 未找到「特别关注」分组或该分组为空。请在雪球 App/网页端先建立「特别关注」分组并添加成员。</div>';
       return;
     }
 
     const stored = await new Promise(r => chrome.storage.local.get('selectedUsers', r));
-    const selSet = new Set(stored.selectedUsers || []);
+    // 首次（从未勾选过）→ 默认全选并持久化，避免「读出来却不监控」的诡异默认。
+    // 用户之后可取消个别；若全部取消，则「空 = 不监控」（符合预期）。
+    let selSet = new Set(stored.selectedUsers || []);
+    if (!stored.selectedUsers || !stored.selectedUsers.length) {
+      selSet = new Set(groupUsers.map(u => u.id));
+      chrome.storage.local.set({ selectedUsers: [...selSet] });
+    }
 
-    let html = `<div style="font-size:12px;color:#888;margin-bottom:6px;">共 ${groupUsers.length} 人（来自「特别关注」分组）</div>`;
+    let html = `<div style="font-size:12px;color:#888;margin-bottom:6px;">共 ${groupUsers.length} 人（来自「特别关注」分组，已默认全选，可取消不监控的人）</div>`;
     groupUsers.forEach((u, i) => {
       html += `<div class="user-item">
         <input type="checkbox" value="${u.id}" id="u${i}" ${selSet.has(u.id) ? 'checked' : ''}>
@@ -120,11 +126,7 @@ function toggleAll(checked) {
 
 function syncManual() {
   const checked = [...document.querySelectorAll('#group-list input[type=checkbox]:checked')].map(el => el.value);
-  $('manual').value = checked.join(', ');
-  chrome.storage.local.set({
-    selectedUsers: checked,
-    manualUsers: checked.join(', '),
-  });
+  chrome.storage.local.set({ selectedUsers: checked });
 }
 
 // ================================================================
@@ -133,9 +135,8 @@ function syncManual() {
 async function load() {
   const stored = await new Promise(r => chrome.storage.local.get('options', r));
   const o = stored.options || {};
-  $('interval').value = o.intervalMin || 2;
+  $('interval').value = o.intervalMin || 5;
   $('sound').checked = !!o.soundOn;
-  $('manual').value = o.manualUsers || '';
   const w = o.wecom || {};
   $('wecom-enabled').checked = !!w.enabled;
   $('wecom-corpid').value = w.corpid || '';
@@ -171,9 +172,8 @@ async function load() {
 }
 
 async function save() {
-  const intervalMin = Math.min(60, Math.max(1, parseInt($('interval').value, 10) || 2));
+  const intervalMin = Math.min(60, Math.max(1, parseInt($('interval').value, 10) || 5));
   const soundOn = $('sound').checked;
-  const manualUsers = $('manual').value.trim();
   const cookie = $('cookie').value.trim();
   const checked = [...document.querySelectorAll('#group-list input[type=checkbox]:checked')].map(el => el.value);
   const wecom = {
@@ -186,14 +186,14 @@ async function save() {
 
   const appearance = { layout: $('layout').value, theme: $('theme').value };
   await new Promise(r => chrome.storage.local.set({
-    options: { intervalMin, soundOn, manualUsers, wecom },
+    options: { intervalMin, soundOn, wecom },
     selectedUsers: checked,
     recentGroupUsers: groupUsers,
     xqCookie: cookie,
     appearance,
   }, r));
 
-  await bg({ type: 'saveOptions', options: { intervalMin, soundOn, manualUsers, wecom } });
+  await bg({ type: 'saveOptions', options: { intervalMin, soundOn, wecom } });
   if (soundOn) await bg({ type: 'setSound', on: true });
 
   showStatus('✅ 已保存', true);

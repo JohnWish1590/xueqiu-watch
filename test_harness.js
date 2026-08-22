@@ -186,7 +186,8 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
 
 (async () => {
   console.log('=== 场景1：正常取特别关注分组（scripting 主路径）===');
-  await sandbox.checkOnce();           // 首次：只记录不通知
+  store.selectedUsers = ['1', '2'];    // 模拟「读取分组后默认全选」
+  await sandbox.checkOnce();           // , 首次：只记录不通知
   assert(store.initialized === true, '首次检查后 initialized=true');
   assert(notifications.length === 0, '首次检查不发通知（避免刷历史帖）');
   assert(Number(store.lastIds['1']) === 101, '记录张三最大帖id=101');
@@ -200,22 +201,44 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
   assert(notifications[0].opts.requireInteraction === true, '通知 requireInteraction=true');
   assert(/刚发的重磅/.test(notifications[0].opts.message), '通知正文去HTML后含新帖内容');
 
-  console.log('=== 场景2：特别关注为空 → 回退手动名单 ===');
+  console.log('=== 场景2：特别关注为空 → 不监控任何人 ===');
   groupsResponse = [ { id: 999, name: '默认分组', users: [] } ];
-  store.options = { intervalMin: 2, manualUsers: '1, 2' };
+  store.options = { intervalMin: 2, soundOn: false };
+  delete store.selectedUsers;          // 勾选为空（未勾选任何博主）
   store.initialized = false; store.lastIds = {};
   notifications = [];
   await sandbox.checkOnce();
-  assert(store.trackedCount === 2, '回退后监控 2 人（手动名单）');
-  user1Posts = [ { id: 200, text: '手动名单新帖' }, ...user1Posts ];
+  assert(store.trackedCount === 0, '特别关注为空 → trackedCount=0（不监控任何人）');
+  assert(notifications.length === 0, '无监控对象时不发通知');
+
+  console.log('=== 场景2b：勾选子集生效（只监控勾选的博主）===');
+  groupsResponse = [
+    { id: 101, name: '特别关注', special: true,
+      users: [ { id: '1', screen_name: '张三' }, { id: '2', screen_name: '李四' } ] },
+  ];
+  store.selectedUsers = ['2'];          // 只勾选李四
+  store.options = { intervalMin: 2, soundOn: false };
+  store.initialized = true; store.lastIds = { '1': 0, '2': 0 };
   notifications = [];
   await sandbox.checkOnce();
-  assert(notifications.length === 1, '手动名单模式也能检测新帖');
+  assert(store.trackedCount === 1, '只勾选 1 人 → 监控 1 人');
+  user2Posts = [ { id: 60, text: '李四新帖' }, ...user2Posts ];
+  notifications = [];
+  await sandbox.checkOnce();
+  assert(notifications.length === 1, '勾选成员的新帖被检测到');
+  assert(/李四/.test(notifications[0].opts.title), '通知标题含被勾选博主「李四」');
+  assert(notifications[0].opts.message.indexOf('张三') === -1, '未勾选的张三不触发通知');
+
+  console.log('=== 场景2c：勾选为空 + 有特别关注分组 → 仍不监控 ===');
+  store.selectedUsers = [];            // 有分组但一个都不勾
+  store.initialized = true; store.lastIds = {};
+  notifications = [];
+  await sandbox.checkOnce();
+  assert(store.trackedCount === 0, '分组非空但勾选为空 → 不监控（用户要求：空=不监控）');
 
   console.log('=== 场景3：纯函数单测 ===');
   assert(sandbox.stripHtml('<p>aa</p><br>b<b>x</b>') === 'aa\nbx', 'stripHtml 去标签保留换行');
   assert(sandbox.truncate('一二三四五六七八九十', 5) === '一二三四…', 'truncate 截断');
-  assert(JSON.stringify(sandbox.parseManualUsers(' 1 , 2\n3 ')) === '[{"id":"1","name":""},{"id":"2","name":""},{"id":"3","name":""}]', 'parseManualUsers');
   assert(sandbox.postUrl('1', '102') === 'https://xueqiu.com/1/102', 'postUrl');
 
   console.log('=== 场景4：声音 + 弹窗 ===');
@@ -223,9 +246,12 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
     { id: 101, name: '特别关注', special: true,
       users: [ { id: '1', screen_name: '张三' }, { id: '2', screen_name: '李四' } ] },
   ];
-  store.options = { intervalMin: 2, manualUsers: '', soundOn: true };
+  store.selectedUsers = ['1', '2'];   // 恢复全选（场景2c 曾置空）
+  store.options = { intervalMin: 2, soundOn: true };
   store.initialized = true;
   store.lastIds = { '1': 200, '2': 50 };
+  // 重置 user2 数据（场景2b 改过），保证本场景只有张三有 1 条新帖
+  user2Posts = [ { id: 50, text: '李四旧帖' } ];
   if (captured.onWinRemoved) captured.onWinRemoved(999);
   captured.offscreen = undefined; captured.win = undefined;
   user1Posts = [ { id: 301, text: '声音弹窗测试' }, { id: 200, text: '旧' } ];
@@ -405,7 +431,7 @@ const assert = (cond, msg) => console.log((cond ? 'PASS ' : 'FAIL ') + msg);
   store.rateLimit = undefined;
   blockUserTimeline = true;                       // 让 user_timeline 返回阻断 HTML 页
   groupsResponse = [ { id: 101, name: '特别关注', special: true, users: [ { id: '1', screen_name: '张三' } ] } ];
-  store.options = { intervalMin: 2, manualUsers: '', soundOn: false };
+  store.options = { intervalMin: 2, soundOn: false };
   store.initialized = true; store.lastIds = { '1': 0 };
   notifications = [];
   await sandbox.checkOnce();                      // 本轮应被风控中断

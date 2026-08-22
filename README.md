@@ -1,6 +1,6 @@
 # 雪哨（xueqiu-watch）— 雪球特别关注新帖提醒
 
-[![version](https://img.shields.io/badge/version-1.5.8-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.5.8)
+[![version](https://img.shields.io/badge/version-1.5.9-blue)](https://github.com/JohnWish1590/xueqiu-watch/releases/tag/v1.5.9)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-brightgreen)](https://developer.chrome.com/docs/extensions/mv3/)
 [![license](https://img.shields.io/badge/license-自定义版权-important)](LICENSE)
 [![updated](https://img.shields.io/badge/最后更新-2026--07--26-informational)](https://github.com/JohnWish1590/xueqiu-watch/commits/main)

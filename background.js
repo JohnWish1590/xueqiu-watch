@@ -485,7 +485,7 @@ async function diagnose() {
 }
 
 async function getOptions() {
-  const def = { intervalMin: 5, manualUsers: '', soundOn: false, wecom: { enabled: false, corpid: '', corpsecret: '', agentid: '', touser: '' } };
+  const def = { intervalMin: 5, soundOn: false, wecom: { enabled: false, corpid: '', corpsecret: '', agentid: '', touser: '' } };
   const stored = await chrome.storage.local.get('options');
   return Object.assign(def, stored.options || {});
 }
@@ -587,12 +587,6 @@ async function getUserTimeline(userId, page = 1, sinceId = 0) {
 }
 
 // ---------- 工具 ----------
-function parseManualUsers(str) {
-  if (!str) return [];
-  return String(str).split(/[\s,;]+/).map(s => s.trim()).filter(Boolean)
-    .map(id => ({ id: String(id), name: '' }));
-}
-
 function postUrl(userId, postId) {
   return `${XQ_BASE}/${userId || '0'}/${postId}`;
 }
@@ -1117,13 +1111,17 @@ async function checkOnce() {
 
   log('── 开始轮询检查（间隔', opts.intervalMin, '分钟）──');
 
-  // 主监控源 = 特别关注分组；为空才回退手动名单
+  // 主监控源 = 特别关注分组；按设置页勾选的子集过滤（只监控勾选的人）
+  // 「勾选为空」= 不监控任何人（用户明确要求：空 = 不监控，彻底移除手动名单）
   const special = await getSpecialFollowUsers();
-  const manual = parseManualUsers(opts.manualUsers);
-  const users = (special && special.length) ? special : manual;
+  const selRes = await chrome.storage.local.get('selectedUsers');
+  const selectedSet = new Set((selRes.selectedUsers || []).map(String));
+  const users = (special && special.length)
+    ? special.filter(u => selectedSet.has(String(u.id)))
+    : [];
 
   if (!users || !users.length) {
-    log('没有可监控的用户（特别关注为空且未配置手动名单）');
+    log('没有可监控的用户（特别关注为空，或「选择要监控的博主」未勾选任何一人）');
     await chrome.storage.local.set({ lastCheck: Date.now(), trackedCount: 0 });
     return;
   }
@@ -1137,11 +1135,11 @@ async function checkOnce() {
   // 轮转深扫进度（跨轮持久化）：每轮直查特别关注里 DEEP_PER_CYCLE 人，保证不漏人
   const deepScanState = stored.deepScan || { idx: 0 };
 
-  // ── 特别关注：一次合并信息流（1~2 个请求）覆盖全部成员 ──
-  if (special && special.length) {
+  // ── 勾选的特别关注：一次合并信息流（1~2 个请求）覆盖全部勾选成员 ──
+  if (users.length) {
     try {
       const feed = await getMergedTimeline(2);
-      const idSet = new Set(special.map(u => String(u.id)));
+      const idSet = new Set(users.map(u => String(u.id)));
       let seen = 0;
       for (const post of feed) {
         const uid = (post.user && String(post.user.id)) || String(post.user_id || '');
@@ -1168,15 +1166,16 @@ async function checkOnce() {
     }
   }
 
-  // ── 兜底深扫：合并流只抓最新 2 页，特别关注帖可能被大量关注对象的新帖挤出视野而漏抓。
-  //    用「轮转逐人直查 user_timeline」兜底：每轮只查 DEEP_PER_CYCLE 人、串行铺开，
-  //    30 人分组下每人约每 75 分钟被直查一次；请求量极小（≈2/轮）不会触发 WAF。
-  //    合并流负责"即时"，深扫负责"绝不漏"，两者互补。
-  if (special && special.length) {
+  // ── 兜底深扫：合并流只抓最新 2 页，勾选成员的新帖可能被大量关注对象的新帖挤出视野而漏抓。
+  //    用「轮转逐人直查 user_timeline」兜底：每轮只查至多 DEEP_PER_CYCLE 人、串行铺开，
+  //    请求量极小（≈2/轮）不会触发 WAF。合并流负责"即时"，深扫负责"绝不漏"，两者互补。
+  //    深扫仅在「勾选的人」范围内轮转（无需扫未勾选的人）。
+  if (users.length) {
+    const scannedLen = users.length;
     const DEEP_PER_CYCLE = 2;
     for (let k = 0; k < DEEP_PER_CYCLE; k++) {
-      const u = special[deepScanState.idx % special.length];
-      deepScanState.idx = (deepScanState.idx + 1) % special.length;
+      const u = users[deepScanState.idx % scannedLen];
+      deepScanState.idx = (deepScanState.idx + 1) % scannedLen;
       try {
         const r = await fetchUserFresh(u, lastIds, initialized);
         if (r.ok) {
@@ -1195,31 +1194,6 @@ async function checkOnce() {
         }
         runError = runError || e.message;
       }
-    }
-  }
-
-  // ── 手动名单里不在特别关注分组内的用户（罕见）：逐人补抓，请求少、串行铺开 ──
-  const manualOnly = manual.filter(m => !(special && special.some(s => String(s.id) === String(m.id))));
-  if (manualOnly.length) {
-    try {
-      const results = await mapSerial(manualOnly, u => fetchUserFresh(u, lastIds, initialized), 1200, 2200);
-      for (const r of results) {
-        if (r.ok) {
-          perUser[r.id] = { name: r.name, ok: true, parsed: r.parsed };
-          if (r.maxId !== undefined) lastIds[r.id] = r.maxId;
-          if (r.mapped) newAll.push(...r.mapped);
-        } else {
-          perUser[r.id] = { name: r.name, ok: false, error: r.error };
-          runError = runError || r.error;
-        }
-      }
-    } catch (e) {
-      if (/\[BLOCKED\]|429/.test(e.message)) {
-        logErr('手动名单取数被雪球风控中断：' + e.message);
-        await chrome.storage.local.set({ lastError: e.message, lastCheck: Date.now() });
-        return;
-      }
-      throw e;
     }
   }
 
